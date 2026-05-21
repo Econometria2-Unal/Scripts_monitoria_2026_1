@@ -10,13 +10,17 @@ from scipy.stats import jarque_bera
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-
+from pathlib import Path
 
 # %% =========================
 # Cargar datos
 # ============================
 
-ruta = "Expotradicionales1990-2017.csv"
+BASE_DIR = Path(__file__).resolve().parent
+
+ruta = BASE_DIR / "Expotradicionales1990-2017.csv"
+
+ruta_te = BASE_DIR / "PTEAUSDM2005-202506.csv"
 
 expotradicionales = pd.read_csv(
     ruta,
@@ -199,7 +203,7 @@ print(ljung_box)
 
 # %% Prueba ARCH de heterocedasticidad
 
-arch_test = het_arch(residuos, nlags=12)
+arch_test = het_arch(residuos, nlags=12) 
 
 print("Prueba ARCH")
 print("LM statistic:", arch_test[0])
@@ -273,7 +277,6 @@ plt.fill_between(
 # SEGUNDA SERIE: PRECIO INTERNACIONAL DEL TÉ
 # ============================
 
-ruta_te = r"C:\Users\nicoj\Desktop\monitoria1\PTEAUSDM2005-202506.csv"
 
 te = pd.read_csv(
     ruta_te,
