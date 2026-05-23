@@ -19,12 +19,12 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "datos"
 
-ruta = DATA_DIR / "Expotradicionales1990-2017.csv"
+ruta_exp = DATA_DIR / "Expotradicionales1990-2017.csv"
 
 ruta_te = DATA_DIR / "PTEAUSDM2005-202506.csv"
 
 expotradicionales = pd.read_csv(
-    ruta,
+    ruta_exp,
     header=None,
     names=["expo_tradicionales"]
 )
@@ -545,3 +545,5 @@ for nombre in nombres_modelos:
 tabla_diagnostico = pd.DataFrame(tabla_diagnostico)
 
 print(tabla_diagnostico.round(3))
+
+# %%
