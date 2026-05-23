@@ -15,6 +15,7 @@ from scipy.stats import jarque_bera
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+from statsmodels.tsa.stattools import adfuller, kpss
 
 
 # %% =========================
@@ -29,7 +30,6 @@ DATA_DIR = BASE_DIR / "datos"
 
 # Rutas de las bases de datos 
 ruta_exp = DATA_DIR / "Expotradicionales1990-2017.csv" # Base de datos de exportaciones
-ruta_te = DATA_DIR / "PTEAUSDM2005-202506.csv" # Base de datos del precio del té
 
 # %% =========================
 # 1. PRIMERA SERIE: EXPORTACIONES TRADICIONALES
@@ -126,9 +126,51 @@ axes[1].set_title("FACP de la serie original")
 plt.tight_layout()
 plt.show()
 
+# %% Tests de Raíz Unitaria 
 
+# Test de Augmented Dickey Fuller (ADF)
+adf_result = adfuller(expo_serie) # Test de Dickey Fuller sin intercepto y tendencia determínistica
+
+# Nota: En el test de ADF si no rechazo la H0 la serie no es estacionaria
+#       y si rechazo la H0 la serie es estacionaria. 
+
+print("=== Test ADF ===")
+print("Estadístico ADF:", adf_result[0])
+print("p-valor:", adf_result[1])
+print("Rezagos usados:", adf_result[2]) 
+print("Observaciones:", adf_result[3])
+print("Valores críticos:")
+for nivel, valor in adf_result[4].items():
+    print(f"{nivel}: {valor}")
+
+if adf_result[1] < 0.05:
+    print("ADF: Rechazamos H0. Según el test, la serie es estacionaria.")
+else:
+    print("ADF: No rechazamos H0. Según el test, la serie no es estacionaria.")
+
+# Test KPSS
+kpss_result = kpss(expo_serie, regression="c", nlags="auto")
+
+# Nota: En prueba KPSS se interpreta al contario que una prueba ADF.
+#       Si no rechazo la H0 la serie es estacionaria
+#       y si rechazo la H0 la serie es no estacionaria. 
+
+print("\n=== Test KPSS ===")
+print("Estadístico KPSS:", kpss_result[0])
+print("p-valor:", kpss_result[1])
+print("Rezagos usados:", kpss_result[2])
+print("Valores críticos:")
+for nivel, valor in kpss_result[3].items():
+    print(f"{nivel}: {valor}")
+
+if kpss_result[1] < 0.05:
+    print("KPSS: rechazamos H0. Según el test, la serie es no estacionaria.")
+else:
+    print("KPSS: no rechazamos H0. Según el test, La serie es estacionaria.")
+
+# Nota: Según los resultados de la prueba ADF y KPSS, hay que 
+#       diferenciar la serie. 
 # %% Serie diferenciada
-
 expo_serie_diff = expo_serie.diff().dropna()
 
 # Gráfica de la serie de tiempo de la "diferencia exportaciones tradicionales"
@@ -192,7 +234,7 @@ plt.show()
 # Paso 1.2: Estimación
 # ============================
 
-# 1. Lo primero es creo un objeto de la clase SARIMAX 
+# Lo primero es crear un objeto de la clase SARIMAX 
 # (Asociado a un MA(1) en éste ejemplo)
 # Acá es donde se específica el modelo 
 modelo_ma1 = SARIMAX(
@@ -206,7 +248,7 @@ modelo_ma1 = SARIMAX(
 # Objeto tipo "SARIMAX" del paquete statmodels
 type(modelo_ma1)
 
-# 2. Acá es donde se realiza la estimación del modelo MA(1)
+#  Acá es donde se realiza la estimación del modelo MA(1)
 estimacion_ma1 = modelo_ma1.fit(disp=False)
 
 # Nota: El método de estimación es máxima verosimilitud 
@@ -378,275 +420,3 @@ plt.fill_between(
 
 # Note que para un MA(1), los pronósticos puntuales se vuelven 
 # constantes después del primer paso adelante
-# %% =========================
-# 2. SEGUNDA SERIE: PRECIO INTERNACIONAL DEL TÉ
-# ============================
-
-te = pd.read_csv(
-    ruta_te,
-    header=None,
-    names=["precio_te"],
-    decimal=",",
-    sep="\t"
-)
-
-print(te.head())
-print(te.tail())
-
-
-# %% =========================
-# Crear índice temporal
-# ============================
-
-fechas_te = pd.date_range(
-    start="2005-01-01",
-    periods=len(te),
-    freq="MS"
-)
-
-te.index = fechas_te
-
-print(te.head())
-print(te.tail())
-
-
-# %% =========================
-# Crear serie de tiempo
-# ============================
-
-y_te = te["precio_te"].copy()
-y_te = pd.to_numeric(y_te, errors="coerce")
-y_te = y_te.dropna()
-
-print(y_te.head())
-print(y_te.tail())
-print(y_te.describe())
-
-
-# %% =========================
-# IDENTIFICACIÓN
-# ============================
-
-plt.figure(figsize=(10, 5))
-plt.plot(y_te)
-plt.title("Precio internacional del té, 2005-2025")
-plt.xlabel("Fecha")
-plt.ylabel("Precio té (USD)")
-plt.grid(True)
-plt.show()
-
-
-# %% FAC y FACP del precio del té
-
-fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-plot_acf(
-    y_te,
-    lags=15,
-    alpha=0.05,
-    bartlett_confint=False,
-    ax=axes[0]
-)
-
-axes[0].set_title("FAC del precio del té")
-
-plot_pacf(
-    y_te,
-    lags=15,
-    alpha=0.05,
-    method="ywm",
-    ax=axes[1]
-)
-
-axes[1].set_title("FACP del precio del té")
-
-plt.tight_layout()
-plt.show()
-
-
-# %% Logaritmo del precio del té
-
-y_te_log = np.log(y_te)
-
-plt.figure(figsize=(10, 5))
-plt.plot(y_te_log)
-plt.title("Logaritmo del precio internacional del té")
-plt.xlabel("Fecha")
-plt.ylabel("Log(Precio té)")
-plt.grid(True)
-plt.show()
-
-
-# %% =========================
-# ESTIMACIÓN
-# ============================
-
-modelos_te = {
-    "ARMA(1,0)": (1, 0, 0),
-    "ARMA(2,0)": (2, 0, 0),
-    "ARMA(1,1)": (1, 0, 1),
-}
-
-resultados_te = {}
-
-for nombre, orden in modelos_te.items():
-    modelo = SARIMAX(
-        y_te,
-        order=orden,
-        trend="c",
-        enforce_stationarity=False,
-        enforce_invertibility=False
-    )
-
-    resultado = modelo.fit(disp=False)
-    resultados_te[nombre] = resultado
-
-    print("\n", nombre)
-    print(resultado.summary())
-
-
-# %% =========================
-# Tabla resumen de modelos estimados
-# ============================
-
-tabla_modelos = []
-
-for nombre, resultado in resultados_te.items():
-    params = resultado.params
-    errores = resultado.bse
-
-    intercepto = params.get("intercept", np.nan)
-
-    ar1 = params.get("ar.L1", np.nan)
-    ar2 = params.get("ar.L2", np.nan)
-    ma1 = params.get("ma.L1", np.nan)
-
-    se_ar1 = errores.get("ar.L1", np.nan)
-    se_ar2 = errores.get("ar.L2", np.nan)
-    se_ma1 = errores.get("ma.L1", np.nan)
-
-    ar1_mu = params.get("ar.L1", 0)
-    ar2_mu = params.get("ar.L2", 0)
-
-    if "ar.L1" in params.index or "ar.L2" in params.index:
-        mu = intercepto / (1 - ar1_mu - ar2_mu)
-    else:
-        mu = intercepto
-
-    tabla_modelos.append({
-        "Modelo": nombre,
-        "a1": ar1,
-        "se_a1": se_ar1,
-        "a2": ar2,
-        "se_a2": se_ar2,
-        "b1": ma1,
-        "se_b1": se_ma1,
-        "mu": mu,
-        "AIC": resultado.aic,
-        "BIC": resultado.bic,
-    })
-
-tabla_modelos_te = pd.DataFrame(tabla_modelos)
-
-print(tabla_modelos_te.round(3))
-
-
-# %% =========================
-# GRÁFICAS
-# ============================
-
-fig, axes = plt.subplots(3, 3, figsize=(14, 10))
-
-nombres_modelos = ["ARMA(1,0)", "ARMA(2,0)", "ARMA(1,1)"]
-
-for i, nombre in enumerate(nombres_modelos):
-    resultado = resultados_te[nombre]
-
-    p = resultado.model.order[0]
-    q = resultado.model.order[2]
-    n_inicial = max(p, q, 1)
-
-    residuos = resultado.resid.dropna().iloc[n_inicial:]
-    residuos_cuadrado = residuos**2
-
-    axes[i, 0].plot(
-        residuos,
-        color="black",
-        linewidth=1
-    )
-
-    axes[i, 0].set_title(f"Residuos {nombre}")
-    axes[i, 0].set_xlabel("Fecha")
-    axes[i, 0].set_ylabel("Residuo")
-
-    plot_acf(
-        residuos,
-        lags=15,
-        alpha=0.05,
-        bartlett_confint=False,
-        ax=axes[i, 1]
-    )
-
-    axes[i, 1].set_title(f"FAC residuos {nombre}")
-    axes[i, 1].set_xlabel("Rezago")
-    axes[i, 1].set_ylabel("ACF")
-
-    plot_acf(
-        residuos_cuadrado,
-        lags=15,
-        alpha=0.05,
-        bartlett_confint=False,
-        ax=axes[i, 2]
-    )
-
-    axes[i, 2].set_title(f"FAC residuos² {nombre}")
-    axes[i, 2].set_xlabel("Rezago")
-    axes[i, 2].set_ylabel("ACF")
-
-plt.tight_layout()
-plt.show()
-
-
-# %% =========================
-# VALIDACIÓN SUPUESTOS
-# ============================
-
-tabla_diagnostico = []
-
-for nombre in nombres_modelos:
-    resultado = resultados_te[nombre]
-
-    p = resultado.model.order[0]
-    q = resultado.model.order[2]
-    n_inicial = max(p, q, 1)
-
-    residuos = resultado.resid.dropna().iloc[n_inicial:]
-
-    jb_pvalue = jarque_bera(residuos).pvalue
-
-    arch_1 = het_arch(residuos, nlags=1)[1]
-    arch_2 = het_arch(residuos, nlags=2)[1]
-    arch_5 = het_arch(residuos, nlags=5)[1]
-
-    ljung_box = acorr_ljungbox(
-        residuos,
-        lags=[5, 10, 20],
-        return_df=True
-    )
-
-    tabla_diagnostico.append({
-        "Modelo": nombre,
-        "JB": jb_pvalue,
-        "A(1)": arch_1,
-        "A(2)": arch_2,
-        "A(5)": arch_5,
-        "LB(5)": ljung_box.loc[5, "lb_pvalue"],
-        "LB(10)": ljung_box.loc[10, "lb_pvalue"],
-        "LB(20)": ljung_box.loc[20, "lb_pvalue"],
-    })
-
-tabla_diagnostico = pd.DataFrame(tabla_diagnostico)
-
-print(tabla_diagnostico.round(3))
-
-# %%
