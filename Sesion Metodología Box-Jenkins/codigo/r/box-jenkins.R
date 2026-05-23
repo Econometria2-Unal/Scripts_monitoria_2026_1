@@ -3,6 +3,8 @@
 # ============================================
 
 library(fs)
+library(here)
+
 library(readr)
 library(ggplot2)
 library(tsibble)
@@ -17,15 +19,22 @@ library(lmtest)
 # RUTAS
 # ============================================
 
-directorio <- fs::path_home("Desktop", "monitoria1")
-ruta       <- fs::path(directorio, "Expotradicionales1990-2017.csv")
-ruta_te    <- fs::path(directorio, "PTEAUSDM2005-202506.csv")
+library(fs)
+library(here)
+
+here::i_am("Sesion Metodología Box-Jenkins/codigo/r/box-jenkins.R")
+
+directorio <- fs::path(here::here("Sesion Metodología Box-Jenkins", "datos"))
+
+ruta_exp <- fs::path(directorio, "Expotradicionales1990-2017.csv")
+ruta_te <- fs::path(directorio, "PTEAUSDM2005-202506.csv")
+
 # ============================================
 # CARGAR DATOS
 # ============================================
 
 expotradicionales <- read_csv(
-  ruta,
+  ruta_exp,
   col_names = "expo_tradicionales"
 )
 

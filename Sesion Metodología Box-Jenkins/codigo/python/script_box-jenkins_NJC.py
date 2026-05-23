@@ -16,11 +16,12 @@ from pathlib import Path
 # Cargar datos
 # ============================
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parents[2]
+DATA_DIR = BASE_DIR / "datos"
 
-ruta = BASE_DIR / "Expotradicionales1990-2017.csv"
+ruta = DATA_DIR / "Expotradicionales1990-2017.csv"
 
-ruta_te = BASE_DIR / "PTEAUSDM2005-202506.csv"
+ruta_te = DATA_DIR / "PTEAUSDM2005-202506.csv"
 
 expotradicionales = pd.read_csv(
     ruta,
