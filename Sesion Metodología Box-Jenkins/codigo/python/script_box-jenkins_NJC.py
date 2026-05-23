@@ -1,124 +1,164 @@
 # %% =========================
-# Importar paquetes
+# 0.1 Importación de paquetes
 # ============================
 
+# Trabajar con rutas relativas en python 
+from pathlib import Path
+
+# Módulos de numpy, pandas, matplotlib y scipy
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
 from scipy.stats import jarque_bera
+
+# Módulos de statsmodels
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-from pathlib import Path
+
 
 # %% =========================
-# Cargar datos
+# 0.2 Cargar bases de datos en python usando rutas relativas
 # ============================
 
+# Obtener la ruta del directorio raíz
 BASE_DIR = Path(__file__).resolve().parents[2]
+
+# Obtener la ruta del directorio con los datos
 DATA_DIR = BASE_DIR / "datos"
 
-ruta_exp = DATA_DIR / "Expotradicionales1990-2017.csv"
+# Rutas de las bases de datos 
+ruta_exp = DATA_DIR / "Expotradicionales1990-2017.csv" # Base de datos de exportaciones
+ruta_te = DATA_DIR / "PTEAUSDM2005-202506.csv" # Base de datos del precio del té
 
-ruta_te = DATA_DIR / "PTEAUSDM2005-202506.csv"
+# %% =========================
+# 1. PRIMERA SERIE: EXPORTACIONES TRADICIONALES
+# ============================
 
-expotradicionales = pd.read_csv(
+# Base de datos con la serie importada 
+expo_base = pd.read_csv(
     ruta_exp,
     header=None,
     names=["expo_tradicionales"]
 )
 
-print(expotradicionales.head())
+# Ver el tipo de objeto de la base de datos (Pandas.DataFrame)
+print(type(expo_base))
 
+# Ver la cabeza y la cola de la base de datos
+print(expo_base.head())
+print(expo_base.tail())
 
-# %% =========================
-# Crear índice temporal
-# ============================
+# %% Creación del índice temporal de las series de tiempo
 
-fechas = pd.date_range(
+# Creación del índice temporal
+fechas_expo_base = pd.date_range(
     start="1990-01-01",
-    periods=len(expotradicionales),
+    periods=len(expo_base),
     freq="MS"
 )
 
-expotradicionales.index = fechas
+# Agregar el índice temporal a la base de datos de exportaciones tradicionales
+expo_base.index = fechas_expo_base
 
-print(expotradicionales.head())
-print(expotradicionales.tail())
+# El tipo de objeto de la base de datos sigue siendo Pandas.DataFrame
+print(type(expo_base))
+
+# Ver la cabeza y la cola de la base de datos, ahora con índice temporal
+print(expo_base.head())
+print(expo_base.tail())
+
+
+# %% 1.1.2 Creación de la serie de tiempo de "exportaciones"
+
+# La nueva serie de tiempo se va a llamar "expo_serie" y va a tener valores numéricos
+expo_serie = expo_base["expo_tradicionales"].copy()
+expo_serie = pd.to_numeric(expo_serie, errors="coerce")
+expo_serie = expo_serie.dropna() # Borrar missing values
+
+# Ver el principio y final de la serie de tiempo
+print(expo_serie.head())
+print(expo_serie.tail())
+
+# # El tipo de objeto de la base de datos ahora es un Pandas.Series
+print(type(expo_serie))
+
+# Ver algunas estadísticas descriptivas de la serie de tiempo 
+print(expo_serie.describe())
 
 
 # %% =========================
-# Crear serie de tiempo
+# 1.1 Paso 1: Identificación
 # ============================
 
-y = expotradicionales["expo_tradicionales"].copy()
-y = pd.to_numeric(y, errors="coerce")
-y = y.dropna()
-
-print(y.head())
-print(y.tail())
-print(y.describe())
-
-
-# %% =========================
-# PASO 1: IDENTIFICACIÓN
-# ============================
-
+# Gráfica de la serie de tiempo "exportaciones tradicionales"
 plt.figure(figsize=(10, 5))
-plt.plot(y)
+plt.plot(expo_serie)
 plt.title("Exportaciones tradicionales, 1990-2017")
 plt.xlabel("Fecha")
 plt.ylabel("Valor")
 plt.grid(True)
 plt.show()
 
+# %% FAC y FACP de la serie original
 
-# %% FAC de la serie original
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
 plot_acf(
-    y,
+    expo_serie,
     lags=24,
     alpha=0.05,
-    bartlett_confint=False
+    bartlett_confint=False,
+    ax=axes[0]
 )
 
-plt.title("Función de autocorrelación (FAC)")
+axes[0].set_title("FAC exportaciones tradicionales")
+
+plot_pacf(
+    expo_serie,
+    lags=24,
+    alpha=0.05,
+    ax=axes[1]
+)
+
+axes[1].set_title("FACP de la serie original")
+
+plt.tight_layout()
 plt.show()
 
 
 # %% Serie diferenciada
 
-y_diff = y.diff().dropna()
+expo_serie_diff = expo_serie.diff().dropna()
 
+# Gráfica de la serie de tiempo de la "diferencia exportaciones tradicionales"
 plt.figure(figsize=(10, 5))
-plt.plot(y_diff)
+plt.plot(expo_serie_diff)
 plt.title("Serie diferenciada")
 plt.xlabel("Fecha")
 plt.ylabel("Valor")
 plt.grid(True)
 plt.show()
 
-
 # %% Diferencia del logaritmo
 
-y_log_diff = np.log(y).diff().dropna()
+expo_serie_log_diff = np.log(expo_serie).diff().dropna()
 
+# Gráfica de la serie de tiempo de la "diferencia del logaritmo de exportaciones tradicionales"
 plt.figure(figsize=(10, 5))
-plt.plot(y_log_diff)
+plt.plot(expo_serie_log_diff)
 plt.title("Diferencia del logaritmo de la serie original")
 plt.xlabel("Fecha")
 plt.ylabel("Valor")
 plt.grid(True)
 plt.show()
 
-
 # %% FAC y FACP de la diferencia del logaritmo
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
 plot_acf(
-    y_log_diff,
+    expo_serie_log_diff,
     lags=24,
     alpha=0.05,
     bartlett_confint=False,
@@ -128,7 +168,7 @@ plot_acf(
 axes[0].set_title("FAC de la diferencia del logaritmo")
 
 plot_pacf(
-    y_log_diff,
+    expo_serie_log_diff,
     lags=24,
     alpha=0.05,
     ax=axes[1]
@@ -138,59 +178,101 @@ axes[1].set_title("FACP de la diferencia del logaritmo")
 
 plt.tight_layout()
 plt.show()
-
-
-# %% Interpretación preliminar
+# %% Identificación del modelo usando FAC y FACP
 
 # La FAC muestra que solo la primera autocorrelación es significativa.
 # La FACP decae rápidamente.
 # Por tanto, se propone inicialmente un modelo MA(1) sobre la serie
 # transformada, equivalente a un ARIMA(0, 1, 1) sobre log(y).
 
-
+# P.d. También se pueden usar criterios de información para la 
+#      Selección de los ordenes p y q del modelo ARIMA. 
+#      Para acá se uso uso el criterio de la FAC y la FACP
 # %% =========================
-# PASO 2: ESTIMACIÓN
+# Paso 1.2: Estimación
 # ============================
 
+# 1. Lo primero es creo un objeto de la clase SARIMAX 
+# (Asociado a un MA(1) en éste ejemplo)
+# Acá es donde se específica el modelo 
 modelo_ma1 = SARIMAX(
-    y_log_diff,
-    order=(0, 0, 1),
+    np.log(expo_serie),
+    order=(0, 1, 1),
     trend="n",
     enforce_stationarity=False,
     enforce_invertibility=False
 )
 
-resultado_ma1 = modelo_ma1.fit(disp=False)
+# Objeto tipo "SARIMAX" del paquete statmodels
+type(modelo_ma1)
 
-print(resultado_ma1.summary())
+# 2. Acá es donde se realiza la estimación del modelo MA(1)
+estimacion_ma1 = modelo_ma1.fit(disp=False)
+
+# Nota: El método de estimación es máxima verosimilitud 
+#       sobre la representación del modelo en un espacio de estados
+
+# Objeto tipo "SARIMAXResultsWrapper"
+type(estimacion_ma1)
+
+# Se imprimen los resultados principales de la estimación
+# E.g. Coeficientes y significancia de los coeficientes
+print(estimacion_ma1.summary())
 
 
 # %% =========================
-# PASO 3: VALIDACIÓN DEL MODELO
+# Paso 1.3: Validación de supuestos
 # ============================
 
-residuos = resultado_ma1.resid.dropna()
+# Residuales del modelo
+residuales = estimacion_ma1.resid.dropna()
 
-print(residuos.describe())
+# Los residuales son un objeto tipo Pandas.Series
+type(residuales)
 
+# Gráfica de los residuales (deberían comportarse como ruido blanco)
+plt.figure(figsize=(10, 5))
+plt.plot(residuales.iloc[1:-1])
+plt.title("Residuales del modelo MA(1)")
+plt.xlabel("Fecha")
+plt.ylabel("Valor")
+plt.grid(True)
+plt.show()
 
-# %% FAC de los residuos
+# Descripción de los residuales 
+print(residuales.describe())
+
+# %% FAC y FACP de los residuales
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
 plot_acf(
-    residuos,
+    residuales,
     lags=24,
     alpha=0.05,
-    bartlett_confint=False
+    bartlett_confint=False,
+    ax=axes[0]
 )
 
-plt.title("FAC de los residuos")
+axes[0].set_title("FAC de los residuales")
+
+plot_pacf(
+    residuales,
+    lags=24,
+    alpha=0.05,
+    ax=axes[1]
+)
+
+axes[1].set_title("FACP de los residuales")
+
+plt.tight_layout()
 plt.show()
 
 
 # %% Prueba Ljung-Box
 
 ljung_box = acorr_ljungbox(
-    residuos,
+    residuales,
     lags=[6, 12, 18, 24],
     return_df=True
 )
@@ -201,10 +283,35 @@ print(ljung_box)
 # H0: no hay autocorrelación en los residuos.
 # Si p-value > 0.05, no se rechaza H0.
 
+# %% FAC y FACP de los residuales al cuadrado
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+plot_acf(
+    residuales**2,
+    lags=24,
+    alpha=0.05,
+    bartlett_confint=False,
+    ax=axes[0]
+)
+
+axes[0].set_title("FAC de los residuales al cuadrado")
+
+plot_pacf(
+    residuales**2,
+    lags=24,
+    alpha=0.05,
+    ax=axes[1]
+)
+
+axes[1].set_title("FACP de los residuales al cuadrado")
+
+plt.tight_layout()
+plt.show()
 
 # %% Prueba ARCH de heterocedasticidad
 
-arch_test = het_arch(residuos, nlags=12) 
+arch_test = het_arch(residuales, nlags=12) 
 
 print("Prueba ARCH")
 print("LM statistic:", arch_test[0])
@@ -213,10 +320,17 @@ print("LM p-value:", arch_test[1])
 # H0: no hay efectos ARCH.
 # Si p-value > 0.05, no se rechaza H0.
 
+# %% Q-Q plot de los residuos
+import scipy.stats as stats
+plt.figure(figsize=(6, 6))
+stats.probplot(residuales.iloc[1:-1], dist="norm", plot=plt)
+plt.title("Q-Q plot de los residuos")
+plt.grid(True)
+plt.show()
 
 # %% Prueba de normalidad Jarque-Bera
 
-jb_test = jarque_bera(residuos)
+jb_test = jarque_bera(residuales.iloc[1:-1])
 
 print("Prueba Jarque-Bera")
 print("Jarque-Bera statistic:", jb_test.statistic)
@@ -225,34 +339,20 @@ print("Jarque-Bera p-value:", jb_test.pvalue)
 # H0: los residuos siguen una distribución normal.
 # Si p-value > 0.05, no se rechaza H0.
 
-# %% Q-Q plot de los residuos
-import scipy.stats as stats
-plt.figure(figsize=(6, 6))
-stats.probplot(residuos, dist="norm", plot=plt)
-plt.title("Q-Q plot de los residuos")
-plt.grid(True)
-plt.show()
-
 # %% =========================
-# PASO 4: PRONÓSTICO
+# PASO 1.4: Pronóstico
 # ============================
 
-modelo_pronostico = SARIMAX(
-    np.log(y),
-    order=(0, 1, 1),
-    trend="n",
-    enforce_stationarity=False,
-    enforce_invertibility=False
-)
+# A partir de la estimación del MA(1) realizó el pronóstico
 
-resultado_pronostico = modelo_pronostico.fit(disp=False)
+# Protonóstico 12 pasos adelante
+pronostico_log = estimacion_ma1.get_forecast(steps=12)
 
-pronostico_log = resultado_pronostico.get_forecast(steps=12)
-
-media_log = pronostico_log.predicted_mean
+# pronostico puntual e intervalos de predicción del logaritmo de las exportaciones tradicionales
+pronostico_puntual_log = pronostico_log.predicted_mean
 intervalos_log = pronostico_log.conf_int()
 
-pronostico_nivel = np.exp(media_log)
+pronostico_nivel = np.exp(pronostico_puntual_log)
 intervalos_nivel = np.exp(intervalos_log)
 
 tabla_pronostico = pd.DataFrame({
@@ -262,9 +362,10 @@ tabla_pronostico = pd.DataFrame({
 })
 
 print(tabla_pronostico)
-# %%
+
+# Gráfica del pronóstico
 plt.figure(figsize=(10, 5))
-plt.plot(y, label="Datos históricos")
+plt.plot(expo_serie, label="Datos históricos")
 plt.plot(pronostico_nivel, label="Pronóstico", color="orange")
 plt.fill_between(
     pronostico_nivel.index,
@@ -274,10 +375,12 @@ plt.fill_between(
     alpha=0.3,
     label="Intervalo de confianza"
 )
-# %% =========================
-# SEGUNDA SERIE: PRECIO INTERNACIONAL DEL TÉ
-# ============================
 
+# Note que para un MA(1), los pronósticos puntuales se vuelven 
+# constantes después del primer paso adelante
+# %% =========================
+# 2. SEGUNDA SERIE: PRECIO INTERNACIONAL DEL TÉ
+# ============================
 
 te = pd.read_csv(
     ruta_te,

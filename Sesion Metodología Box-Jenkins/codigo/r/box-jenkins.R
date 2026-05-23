@@ -1,6 +1,4 @@
-# ============================================
-# IMPORTAR PAQUETES
-# ============================================
+# Importar paquetes -------------------------------------------------------------------
 
 library(fs)
 library(here)
@@ -19,9 +17,7 @@ library(lmtest)
 # Evita que FinTS::ARIMA enmascare el estimador ARIMA de fable.
 ARIMA <- fable::ARIMA
 
-# ============================================
-# RUTAS
-# ============================================
+# Rutas -------------------------------------------------------------------
 
 here::i_am("Sesion Metodología Box-Jenkins/codigo/r/box-jenkins.R")
 
@@ -30,9 +26,7 @@ directorio <- fs::path(here::here("Sesion Metodología Box-Jenkins", "datos"))
 ruta_exp <- fs::path(directorio, "Expotradicionales1990-2017.csv")
 ruta_te <- fs::path(directorio, "PTEAUSDM2005-202506.csv")
 
-# ============================================
-# CARGAR DATOS
-# ============================================
+# Cargar datos -------------------------------------------------------------------
 
 expotradicionales <- read_csv(
   ruta_exp,
@@ -42,9 +36,7 @@ expotradicionales <- read_csv(
 
 head(expotradicionales)
 
-# ============================================
-# CREAR TSIBBLE (Serie de tiempo)
-# ============================================
+# Crear tsibble (serie de tiempo) -------------------------------------------------------------------
 
 y_tbl <- expotradicionales |>
   mutate(
@@ -62,9 +54,7 @@ y_tbl <- y_tbl |>
     log_expo = log(expo_tradicionales)
   )
 
-# ============================================
-# PASO 1: IDENTIFICACIÓN
-# ============================================
+# Paso 1: identificación -------------------------------------------------------------------
 
 print(
   ggtime::autoplot(y_tbl, expo_tradicionales) +
@@ -73,9 +63,7 @@ print(
     ylab("Valor")
 )
 
-# ============================================
-# FAC DE LA SERIE ORIGINAL
-# ============================================
+# Fac de la serie original -------------------------------------------------------------------
 
 print(
   y_tbl |>
@@ -84,9 +72,7 @@ print(
     ggtitle("Función de autocorrelación (FAC)")
 )
 
-# ============================================
-# SERIE DIFERENCIADA
-# ============================================
+# Serie diferenciada -------------------------------------------------------------------
 
 print(
   y_tbl |>
@@ -98,9 +84,7 @@ print(
     ylab("Valor")
 )
 
-# ============================================
-# DIFERENCIA DEL LOGARITMO
-# ============================================
+# Diferencia del logaritmo -------------------------------------------------------------------
 
 y_tbl <- y_tbl |>
   mutate(log_diff = difference(log_expo))
@@ -114,9 +98,7 @@ print(
     ylab("Valor")
 )
 
-# ============================================
-# FAC Y FACP
-# ============================================
+# Fac y facp -------------------------------------------------------------------
 
 print(
   y_tbl |>
@@ -134,9 +116,7 @@ print(
     ggtitle("FACP de la diferencia del logaritmo")
 )
 
-# ============================================
-# INTERPRETACIÓN PRELIMINAR
-# ============================================
+# Interpretación preliminar -------------------------------------------------------------------
 
 # La FAC muestra que solo la primera autocorrelación
 # es significativa.
@@ -144,9 +124,7 @@ print(
 # Se propone inicialmente un modelo MA(1)
 # equivalente a un ARIMA(0,1,1) sobre log(y).
 
-# ============================================
-# PASO 2: ESTIMACIÓN
-# ============================================
+# Paso 2: estimación -------------------------------------------------------------------
 
 # fable estima directamente sobre log_expo con
 # la diferenciación integrada en el operador ARIMA.
@@ -163,17 +141,13 @@ fit_ma1 <- y_tbl2 |>
 
 report(fit_ma1)
 
-# ============================================
-# PASO 3: VALIDACIÓN
-# ============================================
+# Paso 3: validación -------------------------------------------------------------------
 
 residuos <- residuals(fit_ma1)$.resid
 
 summary(residuos)
 
-# ============================================
-# FAC DE LOS RESIDUOS
-# ============================================
+# Fac de los residuos -------------------------------------------------------------------
 
 print(
   fit_ma1 |>
@@ -183,9 +157,7 @@ print(
     ggtitle("FAC de los residuos")
 )
 
-# ============================================
-# PRUEBA LJUNG-BOX
-# ============================================
+# Prueba ljung-box -------------------------------------------------------------------
 
 
 
@@ -196,32 +168,24 @@ for (lag in c(6, 12, 18, 24)) {
 
 # H0: no hay autocorrelación
 
-# ============================================
-# PRUEBA ARCH
-# ============================================
+# Prueba arch -------------------------------------------------------------------
 
 ArchTest(residuos, lags = 12)
 
 # H0: no hay efectos ARCH
 
-# ============================================
-# PRUEBA JARQUE-BERA
-# ============================================
+# Prueba jarque-bera -------------------------------------------------------------------
 
 jarque.bera.test(residuos)
 
 # H0: residuos normales
 
-# ============================================
-# Q-Q PLOT
-# ============================================
+# Q-q plot -------------------------------------------------------------------
 
 qqnorm(residuos)
 qqline(residuos)
 
-# ============================================
-# PASO 4: PRONÓSTICO
-# ============================================
+# Paso 4: pronóstico -------------------------------------------------------------------
 
 pronostico <- fit_ma1 |>
   forecast(h = 12)
@@ -247,9 +211,7 @@ tabla_pronostico <- left_join(tabla_pronostico, intervalos, by = "fecha")
 
 print(tabla_pronostico)
 
-# ============================================
-# GRÁFICA DEL PRONÓSTICO
-# ============================================
+# Gráfica del pronóstico -------------------------------------------------------------------
 
 print(
   ggtime::autoplot(y_tbl, expo_tradicionales) +
@@ -259,10 +221,7 @@ print(
     ylab("Valor")
 )
 
-# ============================================
-# SEGUNDA SERIE:
-# PRECIO INTERNACIONAL DEL TÉ
-# ============================================
+# Segunda serie: precio internacional del té -------------------------------------------------------------------
 
 te <- read_delim(
   ruta_te,
@@ -274,9 +233,7 @@ te <- read_delim(
 
 head(te)
 
-# ============================================
-# CREAR TSIBBLE
-# ============================================
+# Crear tsibble -------------------------------------------------------------------
 
 te_tbl <- te |>
   mutate(
@@ -288,9 +245,7 @@ te_tbl <- te |>
   ) |>
   as_tsibble(index = fecha)
 
-# ============================================
-# IDENTIFICACIÓN
-# ============================================
+# Identificación -------------------------------------------------------------------
 
 print(
   ggtime::autoplot(te_tbl, precio_te) +
@@ -299,9 +254,7 @@ print(
     ylab("Precio té (USD)")
 )
 
-# ============================================
-# FAC Y FACP
-# ============================================
+# Fac y facp -------------------------------------------------------------------
 
 print(
   te_tbl |>
@@ -317,9 +270,7 @@ print(
     ggtitle("FACP del precio del té")
 )
 
-# ============================================
-# LOGARITMO
-# ============================================
+# Logaritmo -------------------------------------------------------------------
 
 print(
   te_tbl |>
@@ -328,9 +279,7 @@ print(
     ggtitle("Logaritmo del precio internacional del té")
 )
 
-# ============================================
-# ESTIMACIÓN
-# ============================================
+# Estimación -------------------------------------------------------------------
 
 fit_te <- te_tbl |>
   model(
@@ -339,9 +288,7 @@ fit_te <- te_tbl |>
     arma11  = fable::ARIMA(precio_te ~ 1 + pdq(1, 0, 1))
   )
 
-# ============================================
-# TABLA RESUMEN AIC / BIC
-# ============================================
+# Tabla resumen aic / bic -------------------------------------------------------------------
 
 tabla_modelos <- glance(fit_te) |>
   select(.model, AIC, BIC) |>
@@ -350,9 +297,7 @@ tabla_modelos <- glance(fit_te) |>
 
 print(tabla_modelos)
 
-# ============================================
-# GRÁFICAS DE RESIDUOS (FAC y FAC²)
-# ============================================
+# Gráficas de residuos (fac y fac²) -------------------------------------------------------------------
 
 nombres_te <- c("ar1", "ar2", "arma11")
 
@@ -385,9 +330,7 @@ for (nom in nombres_te) {
   )
 }
 
-# ============================================
-# VALIDACIÓN DE SUPUESTOS
-# ============================================
+# Validación de supuestos -------------------------------------------------------------------
 
 for (nom in nombres_te) {
   
