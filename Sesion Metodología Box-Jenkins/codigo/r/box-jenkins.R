@@ -15,6 +15,9 @@ library(tseries)
 library(FinTS)
 library(lmtest)
 
+# Evita que FinTS::ARIMA enmascare el estimador ARIMA de fable.
+ARIMA <- fable::ARIMA
+
 # ============================================
 # RUTAS
 # ============================================
@@ -139,9 +142,10 @@ y_tbl2 <- y_tbl |>
 
 str(y_tbl2)
 
-y_tbl2 |> model(ma1 = ARIMA(log(expo_tradicionales) ~ 0 + pdq(0, 1, 1)))
+fit_ma1 <- y_tbl2 |>
+  model(ma1 = fable::ARIMA(log(expo_tradicionales) ~ 0 + pdq(0, 1, 1)))
 
-report(y_tbl2)
+report(fit_ma1)
 
 # ============================================
 # PASO 3: VALIDACIÓN
@@ -213,16 +217,15 @@ tabla_pronostico <- pronostico |>
 # Intervalos de confianza al 95 %
 intervalos <- pronostico |>
   hilo(level = 95) |>
+  fabletools::unpack_hilo(`95%`) |>
   as_tibble() |>
-  select(fecha, `95%`) |>
-  tidyr::unnest_wider(`95%`) |>
-  rename(limite_inferior = lower, limite_superior = upper)
+  select(fecha, `95%_lower`, `95%_upper`) |>
+  rename(limite_inferior = `95%_lower`, limite_superior = `95%_upper`)
 
 tabla_pronostico <- left_join(tabla_pronostico, intervalos, by = "fecha")
 
-# Los valores están en escala log; para volver a niveles:
-tabla_pronostico <- tabla_pronostico |>
-  mutate(across(c(pronostico, limite_inferior, limite_superior), exp))
+# fable revierte automaticamente la transformacion log()
+# en forecast(), por lo que estos valores ya estan en niveles.
 
 print(tabla_pronostico)
 
@@ -300,9 +303,9 @@ autoplot(te_tbl |> mutate(log_te = log(precio_te)), log_te) +
 
 fit_te <- te_tbl |>
   model(
-    ar1     = ARIMA(precio_te ~ 1 + pdq(1, 0, 0)),
-    ar2     = ARIMA(precio_te ~ 1 + pdq(2, 0, 0)),
-    arma11  = ARIMA(precio_te ~ 1 + pdq(1, 0, 1))
+    ar1     = fable::ARIMA(precio_te ~ 1 + pdq(1, 0, 0)),
+    ar2     = fable::ARIMA(precio_te ~ 1 + pdq(2, 0, 0)),
+    arma11  = fable::ARIMA(precio_te ~ 1 + pdq(1, 0, 1))
   )
 
 # ============================================
