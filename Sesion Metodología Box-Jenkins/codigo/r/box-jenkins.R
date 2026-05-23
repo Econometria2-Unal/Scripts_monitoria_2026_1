@@ -2,18 +2,22 @@
 # IMPORTAR PAQUETES
 # ============================================
 
-library(fs)
-library(here)
-
-library(readr)
-library(ggplot2)
-library(tsibble)
-library(feasts)
-library(fable)
-library(dplyr)
-library(tseries)
-library(FinTS)
-library(lmtest)
+suppressPackageStartupMessages(
+  suppressWarnings({
+    library(fs)
+    library(here)
+    library(readr)
+    library(ggplot2)
+    library(ggtime)
+    library(tsibble)
+    library(feasts)
+    library(fable)
+    library(dplyr)
+    library(tseries)
+    library(FinTS)
+    library(lmtest)
+  })
+)
 
 # Evita que FinTS::ARIMA enmascare el estimador ARIMA de fable.
 ARIMA <- fable::ARIMA
@@ -22,15 +26,22 @@ ARIMA <- fable::ARIMA
 # RUTAS
 # ============================================
 
-library(fs)
-library(here)
-
-here::i_am("Sesion Metodología Box-Jenkins/codigo/r/box-jenkins.R")
+suppressMessages(here::i_am("Sesion Metodología Box-Jenkins/codigo/r/box-jenkins.R"))
 
 directorio <- fs::path(here::here("Sesion Metodología Box-Jenkins", "datos"))
+directorio_imagenes <- fs::path(
+  here::here("Sesion Metodología Box-Jenkins"),
+  "resultados",
+  "imagenes"
+)
 
 ruta_exp <- fs::path(directorio, "Expotradicionales1990-2017.csv")
 ruta_te <- fs::path(directorio, "PTEAUSDM2005-202506.csv")
+ruta_rplots <- fs::path(directorio_imagenes, "Rplots.pdf")
+
+fs::dir_create(directorio_imagenes)
+pdf(ruta_rplots, width = 10, height = 7)
+on.exit(dev.off(), add = TRUE)
 
 # ============================================
 # CARGAR DATOS
@@ -38,7 +49,8 @@ ruta_te <- fs::path(directorio, "PTEAUSDM2005-202506.csv")
 
 expotradicionales <- read_csv(
   ruta_exp,
-  col_names = "expo_tradicionales"
+  col_names = "expo_tradicionales",
+  show_col_types = FALSE
 )
 
 head(expotradicionales)
@@ -67,30 +79,37 @@ y_tbl <- y_tbl |>
 # PASO 1: IDENTIFICACIÓN
 # ============================================
 
-autoplot(y_tbl, expo_tradicionales) +
-  ggtitle("Exportaciones tradicionales, 1990-2017") +
-  xlab("Fecha") +
-  ylab("Valor")
+print(
+  ggtime::autoplot(y_tbl, expo_tradicionales) +
+    ggtitle("Exportaciones tradicionales, 1990-2017") +
+    xlab("Fecha") +
+    ylab("Valor")
+)
 
 # ============================================
 # FAC DE LA SERIE ORIGINAL
 # ============================================
 
-y_tbl |>
-  ACF(expo_tradicionales, lag_max = 24) |>
-  autoplot() +
-  ggtitle("Función de autocorrelación (FAC)")
+print(
+  y_tbl |>
+    ACF(expo_tradicionales, lag_max = 24) |>
+    ggtime::autoplot() +
+    ggtitle("Función de autocorrelación (FAC)")
+)
 
 # ============================================
 # SERIE DIFERENCIADA
 # ============================================
 
-y_tbl |>
-  mutate(diff_expo = difference(expo_tradicionales)) |>
-  autoplot(diff_expo) +
-  ggtitle("Serie diferenciada") +
-  xlab("Fecha") +
-  ylab("Valor")
+print(
+  y_tbl |>
+    mutate(diff_expo = difference(expo_tradicionales)) |>
+    filter(!is.na(diff_expo)) |>
+    ggtime::autoplot(diff_expo) +
+    ggtitle("Serie diferenciada") +
+    xlab("Fecha") +
+    ylab("Valor")
+)
 
 # ============================================
 # DIFERENCIA DEL LOGARITMO
@@ -99,24 +118,34 @@ y_tbl |>
 y_tbl <- y_tbl |>
   mutate(log_diff = difference(log_expo))
 
-autoplot(y_tbl, log_diff) +
-  ggtitle("Diferencia del logaritmo de la serie original") +
-  xlab("Fecha") +
-  ylab("Valor")
+print(
+  y_tbl |>
+    filter(!is.na(log_diff)) |>
+    ggtime::autoplot(log_diff) +
+    ggtitle("Diferencia del logaritmo de la serie original") +
+    xlab("Fecha") +
+    ylab("Valor")
+)
 
 # ============================================
 # FAC Y FACP
 # ============================================
 
-y_tbl |>
-  ACF(log_diff, lag_max = 15) |>
-  autoplot() +
-  ggtitle("FAC de la diferencia del logaritmo")
+print(
+  y_tbl |>
+    filter(!is.na(log_diff)) |>
+    ACF(log_diff, lag_max = 15) |>
+    ggtime::autoplot() +
+    ggtitle("FAC de la diferencia del logaritmo")
+)
 
-y_tbl |>
-  PACF(log_diff, lag_max = 15) |>
-  autoplot() +
-  ggtitle("FACP de la diferencia del logaritmo")
+print(
+  y_tbl |>
+    filter(!is.na(log_diff)) |>
+    PACF(log_diff, lag_max = 15) |>
+    ggtime::autoplot() +
+    ggtitle("FACP de la diferencia del logaritmo")
+)
 
 # ============================================
 # INTERPRETACIÓN PRELIMINAR
@@ -159,11 +188,13 @@ summary(residuos)
 # FAC DE LOS RESIDUOS
 # ============================================
 
-fit_ma1 |>
-  augment() |>
-  ACF(.resid, lag_max = 24) |>
-  autoplot() +
-  ggtitle("FAC de los residuos")
+print(
+  fit_ma1 |>
+    augment() |>
+    ACF(.resid, lag_max = 24) |>
+    ggtime::autoplot() +
+    ggtitle("FAC de los residuos")
+)
 
 # ============================================
 # PRUEBA LJUNG-BOX
@@ -233,11 +264,13 @@ print(tabla_pronostico)
 # GRÁFICA DEL PRONÓSTICO
 # ============================================
 
-autoplot(y_tbl, expo_tradicionales) +
-  autolayer(pronostico, level = 95) +
-  ggtitle("Pronóstico de exportaciones") +
-  xlab("Fecha") +
-  ylab("Valor")
+print(
+  ggtime::autoplot(y_tbl, expo_tradicionales) +
+    ggtime::autolayer(pronostico, level = 95) +
+    ggtitle("Pronóstico de exportaciones") +
+    xlab("Fecha") +
+    ylab("Valor")
+)
 
 # ============================================
 # SEGUNDA SERIE:
@@ -248,7 +281,8 @@ te <- read_delim(
   ruta_te,
   delim   = "\t",
   col_names = "precio_te",
-  locale  = locale(decimal_mark = ",")
+  locale  = locale(decimal_mark = ","),
+  show_col_types = FALSE
 )
 
 head(te)
@@ -271,31 +305,41 @@ te_tbl <- te |>
 # IDENTIFICACIÓN
 # ============================================
 
-autoplot(te_tbl, precio_te) +
-  ggtitle("Precio internacional del té, 2005-2025") +
-  xlab("Fecha") +
-  ylab("Precio té (USD)")
+print(
+  ggtime::autoplot(te_tbl, precio_te) +
+    ggtitle("Precio internacional del té, 2005-2025") +
+    xlab("Fecha") +
+    ylab("Precio té (USD)")
+)
 
 # ============================================
 # FAC Y FACP
 # ============================================
 
-te_tbl |>
-  ACF(precio_te, lag_max = 15) |>
-  autoplot() +
-  ggtitle("FAC del precio del té")
+print(
+  te_tbl |>
+    ACF(precio_te, lag_max = 15) |>
+    ggtime::autoplot() +
+    ggtitle("FAC del precio del té")
+)
 
-te_tbl |>
-  PACF(precio_te, lag_max = 15) |>
-  autoplot() +
-  ggtitle("FACP del precio del té")
+print(
+  te_tbl |>
+    PACF(precio_te, lag_max = 15) |>
+    ggtime::autoplot() +
+    ggtitle("FACP del precio del té")
+)
 
 # ============================================
 # LOGARITMO
 # ============================================
 
-autoplot(te_tbl |> mutate(log_te = log(precio_te)), log_te) +
-  ggtitle("Logaritmo del precio internacional del té")
+print(
+  te_tbl |>
+    mutate(log_te = log(precio_te)) |>
+    ggtime::autoplot(log_te) +
+    ggtitle("Logaritmo del precio internacional del té")
+)
 
 # ============================================
 # ESTIMACIÓN
@@ -327,29 +371,31 @@ nombres_te <- c("ar1", "ar2", "arma11")
 
 for (nom in nombres_te) {
   
-  res_vec <- residuals(fit_te |> select(nom))$.resid
+  res_vec <- residuals(fit_te |> select(all_of(nom)))$.resid
   
   # Residuos en el tiempo
   plot(res_vec, main = paste("Residuos", nom), type = "l")
   
   # FAC residuos
-  fit_te |>
-    select(nom) |>
-    augment() |>
-    ACF(.resid, lag_max = 15) |>
-    autoplot() +
-    ggtitle(paste("FAC residuos", nom)) |>
-    print()
+  print(
+    fit_te |>
+      select(all_of(nom)) |>
+      augment() |>
+      ACF(.resid, lag_max = 15) |>
+      ggtime::autoplot() +
+      ggtitle(paste("FAC residuos", nom))
+  )
   
   # FAC residuos²
-  fit_te |>
-    select(nom) |>
-    augment() |>
-    mutate(resid2 = .resid^2) |>
-    ACF(resid2, lag_max = 15) |>
-    autoplot() +
-    ggtitle(paste("FAC residuos\u00b2", nom)) |>
-    print()
+  print(
+    fit_te |>
+      select(all_of(nom)) |>
+      augment() |>
+      mutate(resid2 = .resid^2) |>
+      ACF(resid2, lag_max = 15) |>
+      ggtime::autoplot() +
+      ggtitle(paste("FAC residuos\u00b2", nom))
+  )
 }
 
 # ============================================
@@ -358,7 +404,7 @@ for (nom in nombres_te) {
 
 for (nom in nombres_te) {
   
-  res_vec <- residuals(fit_te |> select(nom))$.resid
+  res_vec <- residuals(fit_te |> select(all_of(nom)))$.resid
   
   cat("\n========================\n")
   cat(nom, "\n")
