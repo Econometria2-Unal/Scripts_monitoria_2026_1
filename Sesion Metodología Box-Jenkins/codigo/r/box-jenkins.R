@@ -2,22 +2,19 @@
 # IMPORTAR PAQUETES
 # ============================================
 
-suppressPackageStartupMessages(
-  suppressWarnings({
-    library(fs)
-    library(here)
-    library(readr)
-    library(ggplot2)
-    library(ggtime)
-    library(tsibble)
-    library(feasts)
-    library(fable)
-    library(dplyr)
-    library(tseries)
-    library(FinTS)
-    library(lmtest)
-  })
-)
+library(fs)
+library(here)
+
+library(readr)
+library(ggplot2)
+library(ggtime)
+library(tsibble)
+library(feasts)
+library(fable)
+library(dplyr)
+library(tseries)
+library(FinTS)
+library(lmtest)
 
 # Evita que FinTS::ARIMA enmascare el estimador ARIMA de fable.
 ARIMA <- fable::ARIMA
@@ -26,22 +23,12 @@ ARIMA <- fable::ARIMA
 # RUTAS
 # ============================================
 
-suppressMessages(here::i_am("Sesion Metodología Box-Jenkins/codigo/r/box-jenkins.R"))
+here::i_am("Sesion Metodología Box-Jenkins/codigo/r/box-jenkins.R")
 
 directorio <- fs::path(here::here("Sesion Metodología Box-Jenkins", "datos"))
-directorio_imagenes <- fs::path(
-  here::here("Sesion Metodología Box-Jenkins"),
-  "resultados",
-  "imagenes"
-)
 
 ruta_exp <- fs::path(directorio, "Expotradicionales1990-2017.csv")
 ruta_te <- fs::path(directorio, "PTEAUSDM2005-202506.csv")
-ruta_rplots <- fs::path(directorio_imagenes, "Rplots.pdf")
-
-fs::dir_create(directorio_imagenes)
-pdf(ruta_rplots, width = 10, height = 7)
-on.exit(dev.off(), add = TRUE)
 
 # ============================================
 # CARGAR DATOS
