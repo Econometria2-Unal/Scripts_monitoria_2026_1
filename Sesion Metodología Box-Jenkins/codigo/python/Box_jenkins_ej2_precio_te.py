@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.stats import jarque_bera
+from scipy.stats import jarque_bera, probplot
 
 # Módulos de statsmodels
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
@@ -18,6 +18,7 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.stattools import adfuller, kpss
 
+#TODO: Tal vez todo ésto se pueda hacer mejor con programación funcional! Explorar en el futuro!
 
 # %% =========================
 # 0.2 Cargar bases de datos en python usando rutas relativas
@@ -302,7 +303,7 @@ def se_media_incondicional_sarimax(resultado):
 # el diccionario tiene 3 modelos. 
 for nombre, orden in modelos_serie_te.items():
     
-    # Estimación de cada uno de los modelos
+    # Especicación de cada uno de los modelos
     modelo = SARIMAX(
         te_serie,
         order=orden,
@@ -311,9 +312,9 @@ for nombre, orden in modelos_serie_te.items():
         enforce_invertibility=False
     ) 
     
-    # Nota: Se estima cada uno de los modelos en nivel
+    # Nota: Se especifican en éste ejemplo particular, cada uno de los modelos en nivel
 
-    # Se estima el modelo 
+    # Se estiman los modelos, dada la especificación dada
     estimacion_modelo = modelo.fit(disp=False)
     
     # Nota: El método de estimación es máxima verosimilitud 
@@ -522,6 +523,36 @@ for i, nombre in enumerate(nombres_modelos):
 plt.tight_layout()
 plt.show()
 
+# %% Gráfica residuales Q-Q plot
+
+# Especificar una grilla 1x3
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+for i, nombre in enumerate(nombres_modelos):
+    # Estimaciones de cada uno de los modelos
+    resultado = estimaciones_te_serie[nombre]
+
+    # Encontrar el orden p, q del modelo
+    p = resultado.model.order[0]
+    q = resultado.model.order[2]
+    n_inicial = max(p, q, 1)
+
+    # Se obtienen los residuales
+    residuos = resultado.resid.dropna().iloc[n_inicial:]
+
+    # Q-Q plot de los residuales
+    probplot(
+        residuos.iloc[1:-1],
+        dist="norm",
+        plot=axes[i]
+    )
+
+    axes[i].set_title(f"Q-Q plot residuos {nombre}")
+    axes[i].grid(True)
+
+plt.tight_layout()
+plt.show()
+
 
 # %% Tabla con los principales resultados de las prubas de validación de supuestos
 
@@ -598,16 +629,19 @@ colores_pronostico = {
 
 def calcular_pronostico_modelo(nombre):
     """Genera la tabla de pronóstico de un modelo estimado."""
-    resultado = estimaciones_te_serie[nombre]
+    
+    # Se almacena las estimaciones, de cada uno de los modelos
+    estimacion = estimaciones_te_serie[nombre]
 
     # Pronóstico 12 pasos adelante
-    pronostico_modelo = resultado.get_forecast(steps=horizonte_pronostico)
+    pronostico_modelo = estimacion.get_forecast(steps=horizonte_pronostico)
 
     # Pronóstico puntual e intervalos de predicción
     pronostico_puntual = pronostico_modelo.predicted_mean
     intervalos = pronostico_modelo.conf_int()
 
-    # Guardar resultados para graficar
+    # Guardar resultados en un diccionario para posterior uso en la grafica
+    # TODO: Ésto genera side effects porque está acciendo una variable global. Corregir en el futuro.
     pronosticos_te[nombre] = {
         "pronostico": pronostico_puntual,
         "intervalos": intervalos,
@@ -634,6 +668,7 @@ tabla_pronostico_arma20 = calcular_pronostico_modelo("ARMA(2,0)")
 # Tabla 3: Pronóstico ARMA(1,1)
 tabla_pronostico_arma11 = calcular_pronostico_modelo("ARMA(1,1)")
 
+# Imprimir las 3 tablas de pronósticos con los doce pasos adelante
 print("\n" + "=" * 60)
 print("Pronósticos 12 pasos adelante - ARMA(1,0)")
 print("=" * 60)
@@ -649,7 +684,7 @@ print("Pronósticos 12 pasos adelante - ARMA(1,1)")
 print("=" * 60)
 print(tabla_pronostico_arma11.round(3).to_string(index=False))
 
-# Gráfica conjunta de los pronósticos
+# Gráfica del histórico
 plt.figure(figsize=(10, 5))
 plt.plot(
     te_serie,
@@ -658,6 +693,7 @@ plt.plot(
     linewidth=1
 )
 
+# Gráfica conjunta de los pronósticos de los 3 modelos
 for nombre in nombres_modelos:
     plt.plot(
         pronosticos_te[nombre]["pronostico"],
@@ -674,4 +710,5 @@ plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.show()
 
-# %%
+# Nota: Revise la validación de supuestos, la FAC y la FACP de la serie original, y los criterios
+#       de información y seleccione el modelo que considere mejor para modelar la serie! 

@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.stats import jarque_bera
+from scipy.stats import jarque_bera, probplot
 
 # Módulos de statsmodels
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
@@ -363,9 +363,9 @@ print("LM p-value:", arch_test[1])
 # Si p-value > 0.05, no se rechaza H0.
 
 # %% Q-Q plot de los residuos
-import scipy.stats as stats
+
 plt.figure(figsize=(6, 6))
-stats.probplot(residuales.iloc[1:-1], dist="norm", plot=plt)
+probplot(residuales.iloc[1:-1], dist="norm", plot=plt)
 plt.title("Q-Q plot de los residuos")
 plt.grid(True)
 plt.show()
