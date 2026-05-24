@@ -1,6 +1,4 @@
-# %% =========================
-# 0.1 Importación de paquetes
-# ============================
+# %% Importación de paquetes ============================
 
 # Trabajar con rutas relativas en python 
 from pathlib import Path
@@ -18,9 +16,7 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.stattools import adfuller, kpss
 
 
-# %% =========================
-# 0.2 Cargar bases de datos en python usando rutas relativas
-# ============================
+# %% Cargar bases de datos en python usando rutas relativas =========================
 
 # Obtener la ruta del directorio raíz
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -32,7 +28,7 @@ DATA_DIR = BASE_DIR / "datos"
 ruta_exp = DATA_DIR / "Expotradicionales1990-2017.csv" # Base de datos de exportaciones
 
 # %% =========================
-# 1. PRIMERA SERIE: EXPORTACIONES TRADICIONALES
+# PRIMERA SERIE: EXPORTACIONES TRADICIONALES
 # ============================
 
 # Base de datos con la serie importada a python
@@ -88,7 +84,7 @@ print(expo_serie.describe())
 
 
 # %% =========================
-# 1.1 Paso 1: Identificación
+# Paso 1: Identificación
 # ============================
 
 # Gráfica de la serie de tiempo "exportaciones tradicionales"
@@ -225,13 +221,13 @@ plt.show()
 # La FAC muestra que solo la primera autocorrelación es significativa.
 # La FACP decae rápidamente.
 # Por tanto, se propone inicialmente un modelo MA(1) sobre la serie
-# transformada, equivalente a un ARIMA(0, 1, 1) sobre log(y).
+# transformada, equivalente a un ARIMA(0, 1, 1) sobre log(expo_serie).
 
 # P.d. También se pueden usar criterios de información para la 
 #      Selección de los ordenes p y q del modelo ARIMA. 
 #      Para acá se uso uso el criterio de la FAC y la FACP
 # %% =========================
-# Paso 1.2: Estimación
+# Paso 2: Estimación
 # ============================
 
 # Lo primero es crear un objeto de la clase SARIMAX 
@@ -263,7 +259,7 @@ print(estimacion_ma1.summary())
 
 
 # %% =========================
-# Paso 1.3: Validación de supuestos
+# Paso 3: Validación de supuestos
 # ============================
 
 # Residuales del modelo
@@ -378,11 +374,11 @@ print("Prueba Jarque-Bera")
 print("Jarque-Bera statistic:", jb_test.statistic)
 print("Jarque-Bera p-value:", jb_test.pvalue)
 
-# H0: los residuos siguen una distribución normal.
-# Si p-value > 0.05, no se rechaza H0.
+# H0: los residuos no siguen una distribución normal.
+# Si p-value < 0.05, se rechaza H0.
 
 # %% =========================
-# PASO 1.4: Pronóstico
+# PASO 4: Pronóstico
 # ============================
 
 # A partir de la estimación del MA(1) realizó el pronóstico
@@ -390,11 +386,15 @@ print("Jarque-Bera p-value:", jb_test.pvalue)
 # Protonóstico 12 pasos adelante
 pronostico_log = estimacion_ma1.get_forecast(steps=12)
 
-# pronostico puntual e intervalos de predicción del logaritmo de las exportaciones tradicionales
+# Pronóstico puntual e intervalos de predicción del logaritmo de las exportaciones tradicionales
 pronostico_puntual_log = pronostico_log.predicted_mean
+varianza_pronostico_log = pronostico_log.var_pred_mean
 intervalos_log = pronostico_log.conf_int()
 
-pronostico_nivel = np.exp(pronostico_puntual_log)
+# Al retransformar desde logaritmos, exp(E[log(y)]) corresponde a la mediana.
+# Para obtener la media en niveles se usa la corrección por sesgo:
+# E[y] = exp(mu + 0.5 * sigma^2), bajo normalidad en la escala logarítmica.
+pronostico_nivel = np.exp(pronostico_puntual_log + 0.5 * varianza_pronostico_log)
 intervalos_nivel = np.exp(intervalos_log)
 
 tabla_pronostico = pd.DataFrame({
@@ -420,3 +420,5 @@ plt.fill_between(
 
 # Note que para un MA(1), los pronósticos puntuales se vuelven 
 # constantes después del primer paso adelante
+
+# %%

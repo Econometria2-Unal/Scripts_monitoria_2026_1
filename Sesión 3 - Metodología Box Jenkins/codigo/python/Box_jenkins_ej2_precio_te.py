@@ -1,6 +1,4 @@
-# %% =========================
-# 0.1 Importación de paquetes
-# ============================
+# %% Importación de paquetes =========================
 
 # Trabajar con rutas relativas en python 
 from pathlib import Path
@@ -20,9 +18,7 @@ from statsmodels.tsa.stattools import adfuller, kpss
 
 #TODO: Tal vez todo ésto se pueda hacer mejor con programación funcional! Explorar en el futuro!
 
-# %% =========================
-# 0.2 Cargar bases de datos en python usando rutas relativas
-# ============================
+# %% Cargar bases de datos en python usando rutas relativas =========================
 
 # Obtener la ruta del directorio raíz
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -34,7 +30,7 @@ DATA_DIR = BASE_DIR / "datos"
 ruta_te = DATA_DIR / "PTEAUSDM2005-202506.csv" # Base de datos del precio del té
 
 # %% =========================
-# 2. SEGUNDA SERIE: PRECIO INTERNACIONAL DEL TÉ
+# SEGUNDA SERIE: PRECIO INTERNACIONAL DEL TÉ
 # ============================
 
 # Base de datos con la serie importada a python
@@ -92,7 +88,7 @@ print(f"Media muestral precio del té: {te_serie.mean():.3f}")
 
 
 # %% =========================
-# 2.1 Paso 1: Identificación 
+# Paso 1: Identificación 
 # ============================
 
 # Gráfica de la serie de tiempo "precio del té"
@@ -226,7 +222,7 @@ plt.show()
 #      Selección de los ordenes p y q del modelo ARIMA. 
 
 # %% =========================
-# Paso 2.2 Estimación 
+# Paso 2: Estimación 
 # ============================
 
 # Se estimaran 3 modelos en éste caso, un ARIMA(1,0,0), un ARIMA(2,0,0) y un ARIMA(1,0,1)
@@ -452,7 +448,7 @@ print("\nErrores estándar entre paréntesis.")
 
 
 # %% =========================
-# Paso 2.3: Validación de Supuestos
+# Paso 3: Validación de Supuestos
 # ============================
 
 # Gráfica de los residuales, FAC de los residuales y FAC de los residuales al cuadrado
@@ -609,7 +605,7 @@ tabla_diagnostico = pd.DataFrame(tabla_diagnostico)
 print(tabla_diagnostico.round(3))
 
 # %% =========================
-# Paso 2.4: Pronóstico
+# Paso 4: Pronóstico
 # ============================
 
 # Se calculan pronósticos 12 pasos adelante para cada uno de los modelos estimados
@@ -627,7 +623,7 @@ colores_pronostico = {
 }
 
 
-def calcular_pronostico_modelo(nombre):
+def calcular_pronostico_modelo(nombre, modelo_en_log=False):
     """Genera la tabla de pronóstico de un modelo estimado."""
     
     # Se almacena las estimaciones, de cada uno de los modelos
@@ -639,6 +635,14 @@ def calcular_pronostico_modelo(nombre):
     # Pronóstico puntual e intervalos de predicción
     pronostico_puntual = pronostico_modelo.predicted_mean
     intervalos = pronostico_modelo.conf_int()
+
+    if modelo_en_log:
+        # Al retransformar desde logaritmos, exp(E[log(y)]) corresponde a la mediana.
+        # Para obtener la media en niveles se usa la corrección por sesgo:
+        # E[y] = exp(mu + 0.5 * sigma^2), bajo normalidad en la escala logarítmica.
+        varianza_pronostico_log = pronostico_modelo.var_pred_mean
+        pronostico_puntual = np.exp(pronostico_puntual + 0.5 * varianza_pronostico_log)
+        intervalos = np.exp(intervalos)
 
     # Guardar resultados en un diccionario para posterior uso en la grafica
     # TODO: Ésto genera side effects porque está acciendo una variable global. Corregir en el futuro.
