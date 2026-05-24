@@ -169,8 +169,8 @@ if kpss_result[1] < 0.05:
 else:
     print("KPSS: no rechazamos H0. Según el test, La serie es estacionaria.")
 
-# Nota: Según los resultados de la prueba ADF y KPSS, hay que 
-#       diferenciar la serie. 
+# Nota: Según los resultados de la prueba ADF y KPSS, NO hay que 
+#       diferenciar la serie, dado que esta es estacionaria. 
 
 # %% Logaritmo del precio del té (en niveles)
 
