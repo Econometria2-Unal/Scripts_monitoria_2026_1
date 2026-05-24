@@ -35,7 +35,7 @@ ruta_exp = DATA_DIR / "Expotradicionales1990-2017.csv" # Base de datos de export
 # 1. PRIMERA SERIE: EXPORTACIONES TRADICIONALES
 # ============================
 
-# Base de datos con la serie importada 
+# Base de datos con la serie importada a python
 expo_base = pd.read_csv(
     ruta_exp,
     header=None,
@@ -45,9 +45,9 @@ expo_base = pd.read_csv(
 # Ver el tipo de objeto de la base de datos (Pandas.DataFrame)
 print(type(expo_base))
 
-# Ver la cabeza y la cola de la base de datos
-print(expo_base.head())
-print(expo_base.tail())
+# Ver primeras y últimas observaciones de la base de datos
+print(expo_base.head()) # Primeras observaciones
+print(expo_base.tail()) # Últimas observaciones 
 
 # %% Creación del índice temporal de las series de tiempo
 
@@ -64,12 +64,12 @@ expo_base.index = fechas_expo_base
 # El tipo de objeto de la base de datos sigue siendo Pandas.DataFrame
 print(type(expo_base))
 
-# Ver la cabeza y la cola de la base de datos, ahora con índice temporal
-print(expo_base.head())
-print(expo_base.tail())
+# Ver primeras y últimas observaciones de la base de datos, ahora con índice temporal
+print(expo_base.head()) # Primeras observaciones
+print(expo_base.tail()) # Últimas observaciones 
 
 
-# %% 1.1.2 Creación de la serie de tiempo de "exportaciones"
+# %% Creación de la serie de tiempo de "exportaciones"
 
 # La nueva serie de tiempo se va a llamar "expo_serie" y va a tener valores numéricos
 expo_serie = expo_base["expo_tradicionales"].copy()
