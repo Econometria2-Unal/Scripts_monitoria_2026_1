@@ -1,4 +1,4 @@
-# %% Importacion de paquetes =========================
+# Importacion de paquetes ---
 
 # Trabajar con rutas relativas en R
 library(fs)
@@ -27,7 +27,7 @@ ARIMA <- fable::ARIMA
 # TODO: Tal vez todo esto se pueda hacer mejor con programacion funcional!
 #       Explorar en el futuro.
 
-# %% Cargar bases de datos en R usando rutas relativas =========================
+# Cargar bases de datos en R usando rutas relativas ---
 
 # Fijar la ruta del archivo actual como referencia para here()
 here::i_am(
@@ -43,7 +43,7 @@ DATA_DIR <- fs::path(BASE_DIR, "datos")
 # Rutas de las bases de datos
 ruta_te <- fs::path(DATA_DIR, "PTEAUSDM2005-202506.csv") # Base de datos del precio del te
 
-# %% Funciones auxiliares =========================
+# Funciones auxiliares ---
 
 # Funcion auxiliar para mostrar graficos en una grilla m x n
 grilla <- function(..., nrow, ncol) {
@@ -97,6 +97,23 @@ formato_error_estandar <- function(valor, decimales = 3) {
   paste0("(", sprintf(paste0("%.", decimales, "f"), valor), ")")
 }
 
+formatear_decimales <- function(tabla, decimales = 3) {
+  tabla |>
+    mutate(across(where(is.numeric), ~ sprintf(paste0("%.", decimales, "f"), .x)))
+}
+
+imprimir_tabla_pronostico <- function(titulo, tabla, decimales = 3) {
+  cat("\n", paste(rep("=", 60), collapse = ""), "\n", sep = "")
+  cat(titulo, "\n", sep = "")
+  cat(paste(rep("=", 60), collapse = ""), "\n", sep = "")
+
+  print(
+    as.data.frame(formatear_decimales(tabla, decimales = decimales)),
+    row.names = FALSE,
+    quote = FALSE
+  )
+}
+
 media_incondicional_fable <- function(modelo_estimado) {
   parametros <- stats::coef(modelo_estimado)
 
@@ -138,9 +155,9 @@ residuos_modelo <- function(fit, nombre_modelo) {
     select(fecha, .resid)
 }
 
-# %% =========================
-# SEGUNDA SERIE: PRECIO INTERNACIONAL DEL TE
-# ============================
+# === 
+# SEGUNDA SERIE: PRECIO INTERNACIONAL DEL TE =========================
+# ===
 
 # Base de datos con la serie importada a R
 te_base <- read_delim(
@@ -158,7 +175,7 @@ print(class(te_base))
 print(head(te_base)) # Primeras observaciones
 print(tail(te_base)) # Ultimas observaciones
 
-# %% Creacion del indice temporal de las series de tiempo
+# Creacion del indice temporal de las series de tiempo
 
 # Creacion del indice temporal
 fechas_te_base <- yearmonth(seq(
@@ -179,26 +196,29 @@ print(class(te_tbl))
 print(head(te_tbl)) # Primeras observaciones
 print(tail(te_tbl)) # Ultimas observaciones
 
-# %% Creacion de la serie de tiempo del "precio del te"
+# Creacion de la serie de tiempo del "precio del te"
 
-te_serie <- te_tbl$precio_te
-te_serie <- as.numeric(te_serie)
-te_serie <- te_serie[!is.na(te_serie)]
+# La nueva serie de tiempo se va a llamar "te_serie" y va a tener valores numericos
+te_serie <- te_tbl |>
+  mutate(precio_te = as.numeric(precio_te)) |>
+  filter(!is.na(precio_te)) # Borrar missing values
+
+te_vector <- te_serie$precio_te
 
 # Ver el principio y final de la serie de tiempo
 print(head(te_serie))
 print(tail(te_serie))
 
-# El tipo de objeto de la serie en R es numeric
+# El tipo de objeto de la serie en R sigue siendo un tsibble
 print(class(te_serie))
 
 # Ver algunas estadisticas descriptivas de la serie de tiempo
-print(summary(te_serie))
-cat(sprintf("Media muestral precio del te: %.3f\n", mean(te_serie)))
+print(summary(te_vector))
+cat(sprintf("Media muestral precio del te: %.3f\n", mean(te_vector)))
 
-# %% =========================
-# Paso 1: Identificacion
-# ============================
+# ===
+# Paso 1: Identificacion ====
+# ===
 
 # Grafica de la serie de tiempo "precio del te"
 print(
@@ -206,10 +226,10 @@ print(
     ggtitle("Precio internacional del te, 2005-2025") +
     xlab("Fecha") +
     ylab("Precio te (USD)") +
-    theme_minimal()
+    theme_light()
 )
 
-# %% FAC y FACP del precio del te (serie original)
+# FAC y FACP del precio del te (serie original)
 
 grafico_fac_te <- te_tbl |>
   ACF(precio_te, lag_max = 15) |>
@@ -217,7 +237,8 @@ grafico_fac_te <- te_tbl |>
   ggtitle("FAC del precio del te") +
   ylim(-1, 1) +
   xlab("Rezago") +
-  ylab("ACF")
+  ylab("ACF") + 
+  theme_light()
 
 grafico_facp_te <- te_tbl |>
   PACF(precio_te, lag_max = 15) |>
@@ -225,57 +246,65 @@ grafico_facp_te <- te_tbl |>
   ggtitle("FACP del precio del te") +
   ylim(-1, 1) +
   xlab("Rezago") +
-  ylab("PACF")
+  ylab("PACF") + 
+  theme_light()
 
 grilla(grafico_fac_te, grafico_facp_te, nrow = 1, ncol = 2)
 
-# %% Tests de Raiz Unitaria
+
+# Tests de Raiz Unitaria ---
 
 # Test de Augmented Dickey Fuller (ADF)
-adf_result <- urca::ur.df(te_serie, type = "drift", selectlags = "AIC")
-adf_pvalor <- tseries::adf.test(te_serie, alternative = "stationary")
+adf_result <- ur.df(
+  te_serie$precio_te,
+  type = "drift",
+  selectlags = "AIC"
+)
 
-# Nota: En el test ADF, si no rechazo H0 la serie no es estacionaria
-#       y si rechazo H0 la serie es estacionaria.
+# Nota: En el test de ADF si no rechazo la H0 la serie no es estacionaria
+#       y si rechazo la H0 la serie es estacionaria.
+#       Con urca, se rechaza H0 si el estadistico es menor que el valor critico.
 
-cat("\n=== Test ADF ===\n")
-cat("Estadistico ADF:", adf_result@teststat[1, "tau2"], "\n")
-cat("p-valor aproximado:", adf_pvalor$p.value, "\n")
-cat("Rezagos usados:", adf_result@lags, "\n")
-cat("Observaciones:", length(te_serie), "\n")
-cat("Valores criticos:\n")
-print(adf_result@cval["tau2", ])
+cat("=== Test ADF ===\n")
+print(summary(adf_result))
 
-if (adf_pvalor$p.value < 0.05) {
+adf_stat <- adf_result@teststat[1, "tau2"]
+adf_critico_5 <- adf_result@cval["tau2", "5pct"]
+
+if (adf_stat < adf_critico_5) {
   cat("ADF: Rechazamos H0. Segun el test, la serie es estacionaria.\n")
 } else {
   cat("ADF: No rechazamos H0. Segun el test, la serie no es estacionaria.\n")
 }
 
 # Test KPSS
-kpss_result <- tseries::kpss.test(te_serie, null = "Level")
+kpss_result <- ur.kpss(
+  te_serie$precio_te,
+  type = "mu",
+  lags = "short"
+)
 
 # Nota: En prueba KPSS se interpreta al contrario que una prueba ADF.
-#       Si no rechazo H0 la serie es estacionaria
-#       y si rechazo H0 la serie es no estacionaria.
+#       Si no rechazo la H0 la serie es estacionaria
+#       y si rechazo la H0 la serie es no estacionaria.
+#       Con urca, se rechaza H0 si el estadistico es mayor que el valor critico.
 
 cat("\n=== Test KPSS ===\n")
-cat("Estadistico KPSS:", unname(kpss_result$statistic), "\n")
-cat("p-valor:", kpss_result$p.value, "\n")
-cat("Rezagos usados:", unname(kpss_result$parameter), "\n")
-cat("Valores criticos: revise la salida completa de kpss.test() para detalles.\n")
-print(kpss_result)
+print(summary(kpss_result))
 
-if (kpss_result$p.value < 0.05) {
+kpss_stat <- kpss_result@teststat[1]
+kpss_critico_5 <- kpss_result@cval["critical values", "5pct"]
+
+if (kpss_stat > kpss_critico_5) {
   cat("KPSS: rechazamos H0. Segun el test, la serie es no estacionaria.\n")
 } else {
   cat("KPSS: no rechazamos H0. Segun el test, la serie es estacionaria.\n")
 }
 
-# Nota: Segun los resultados de la prueba ADF y KPSS, hay que
-#       considerar diferenciar la serie.
+# Nota: Según los resultados de la prueba ADF y KPSS, NO hay que 
+#       diferenciar la serie, dado que esta es estacionaria. 
 
-# %% Logaritmo del precio del te (en niveles)
+# Logaritmo del precio del te (en niveles)
 
 te_tbl <- te_tbl |>
   mutate(log_te = log(precio_te))
@@ -285,7 +314,7 @@ print(
     ggtitle("Logaritmo del precio internacional del te") +
     xlab("Fecha") +
     ylab("Log(Precio te)") +
-    theme_minimal()
+    theme_light()
 )
 
 # %% FAC y FACP del precio del te (serie en logaritmos)
@@ -296,7 +325,8 @@ grafico_fac_log_te <- te_tbl |>
   ggtitle("FAC del logaritmo precio del te") +
   ylim(-1, 1) +
   xlab("Rezago") +
-  ylab("ACF")
+  ylab("ACF") + 
+  theme_light()
 
 grafico_facp_log_te <- te_tbl |>
   PACF(log_te, lag_max = 15) |>
@@ -304,11 +334,12 @@ grafico_facp_log_te <- te_tbl |>
   ggtitle("FACP del logaritmo precio del te") +
   ylim(-1, 1) +
   xlab("Rezago") +
-  ylab("PACF")
+  ylab("PACF") + 
+  theme_light()
 
 grilla(grafico_fac_log_te, grafico_facp_log_te, nrow = 1, ncol = 2)
 
-# %% Identificacion del modelo usando FAC y FACP
+# Identificacion del modelo usando FAC y FACP
 
 # En este caso no es tan sencillo determinar el orden p y q del modelo ARIMA de la
 # FAC y la FACP.
@@ -319,9 +350,9 @@ grilla(grafico_fac_log_te, grafico_facp_log_te, nrow = 1, ncol = 2)
 # P.d. Tambien se usaran criterios de informacion para la
 #      seleccion de los ordenes p y q del modelo ARIMA.
 
-# %% =========================
-# Paso 2: Estimacion
-# ============================
+# ===
+# Paso 2: Estimacion =========================
+# ===
 
 # Se estimaran 3 modelos en este caso, un ARIMA(1,0,0), un ARIMA(2,0,0)
 # y un ARIMA(1,0,1).
@@ -329,9 +360,17 @@ grilla(grafico_fac_log_te, grafico_facp_log_te, nrow = 1, ncol = 2)
 # Se crea un vector con los nombres de los modelos que se estimaran.
 nombres_modelos <- c("ARMA(1,0)", "ARMA(2,0)", "ARMA(1,1)")
 
-# Nota: Se especifican los modelos en niveles, para que la estructura sea
-#       comparable con el script de Python.
-#       PDQ(0,0,0) evita que fable agregue terminos estacionales automaticos.
+# En fable la especificación del modelo se hace dentro de model().
+
+# En fable es muy importante tener encuenta lo siguiente 
+# 1. Hay que especificar el orden (p,d,q) del modelo, o sino el lo selecciona
+#    automáticamente (lo cuál no es válido en el taller).
+# 2. Hay que especificar PDQ(0,0,0), o sino de lo contrario, el estimará un modelo
+#    SARIMA de manera automática. Con PDQ(0,0,0) estima un modelo ARIMA puro. 
+#    Si quieren estimar un modelo SARIMA, deben espeficiar los ordenes del PDQ
+#    pero deben justificar porque eso ordenes.
+
+# Nota: Se especifican los modelos en niveles.
 fit_te <- te_tbl |>
   model(
     "ARMA(1,0)" = fable::ARIMA(precio_te ~ 1 + pdq(1, 0, 0) + PDQ(0, 0, 0)),
@@ -347,7 +386,7 @@ for (nombre in nombres_modelos) {
   print(report(fit_te |> select(all_of(nombre))))
 }
 
-# %% Tabla resumen de modelos estimados
+# Tabla resumen de modelos estimados
 
 coeficientes_te <- coef(fit_te)
 ajuste_te <- glance(fit_te)
@@ -454,9 +493,9 @@ cat("\nTabla resumen de modelos estimados\n")
 print(tabla_modelos_te_publicacion, row.names = FALSE)
 cat("\nErrores estandar entre parentesis.\n")
 
-# %% =========================
-# Paso 3: Validacion de Supuestos
-# ============================
+# ===
+# Paso 3: Validacion de Supuestos ============================
+# ===
 
 # Grafica de los residuales, FAC de los residuales y FAC de los residuales al cuadrado
 
@@ -476,7 +515,7 @@ for (nombre in nombres_modelos) {
     ggtitle(paste("Residuales", nombre)) +
     xlab("Fecha") +
     ylab("Residuales") +
-    theme_minimal()
+    theme_light()
 
   # FAC de los residuales
   grafico_fac_residuos <- residuos_tbl |>
@@ -486,7 +525,8 @@ for (nombre in nombres_modelos) {
     ggtitle(paste("FAC residuos", nombre)) +
     ylim(-1, 1) +
     xlab("Rezago") +
-    ylab("ACF")
+    ylab("ACF") + 
+    theme_light()
 
   # FAC de los residuales al cuadrado
   grafico_fac_residuos_cuadrado <- residuos_cuadrado_tbl |>
@@ -496,7 +536,8 @@ for (nombre in nombres_modelos) {
     ggtitle(paste("FAC residuos^2", nombre)) +
     ylim(-1, 1) +
     xlab("Rezago") +
-    ylab("ACF")
+    ylab("ACF") + 
+    theme_light()
 
   graficos_diagnostico <- c(
     graficos_diagnostico,
@@ -507,7 +548,7 @@ for (nombre in nombres_modelos) {
 # Genera una grilla 3x3, equivalente a la del script de Python
 do.call(grilla, c(graficos_diagnostico, list(nrow = 3, ncol = 3)))
 
-# %% Grafica residuales Q-Q plot
+# Grafica residuales Q-Q plot
 
 graficos_qq <- list()
 
@@ -520,14 +561,14 @@ for (nombre in nombres_modelos) {
     ggtitle(paste("Q-Q plot residuos", nombre)) +
     xlab("Cuantiles teoricos") +
     ylab("Cuantiles muestrales") +
-    theme_minimal()
+    theme_light()
 
   graficos_qq <- c(graficos_qq, list(grafico_qq))
 }
 
 grilla(graficos_qq[[1]], graficos_qq[[2]], graficos_qq[[3]], nrow = 1, ncol = 3)
 
-# %% Tabla con los principales resultados de las pruebas de validacion de supuestos
+# Tabla con los principales resultados de las pruebas de validacion de supuestos
 
 # La tabla con los resultados de las pruebas de validacion de supuestos inicialmente sera una lista
 tabla_diagnostico <- list()
@@ -573,9 +614,9 @@ print(
     mutate(across(where(is.numeric), ~ round(.x, 3)))
 )
 
-# %% =========================
-# Paso 4: Pronostico
-# ============================
+# ===
+# Paso 4: Pronostico =========================
+# ===
 
 # Se calculan pronosticos 12 pasos adelante para cada uno de los modelos estimados
 horizonte_pronostico <- 12
@@ -609,31 +650,19 @@ tabla_pronostico_arma20 <- calcular_pronostico_modelo("ARMA(2,0)")
 tabla_pronostico_arma11 <- calcular_pronostico_modelo("ARMA(1,1)")
 
 # Imprimir las 3 tablas de pronosticos con los doce pasos adelante
-cat("\n", paste(rep("=", 60), collapse = ""), "\n", sep = "")
-cat("Pronosticos 12 pasos adelante - ARMA(1,0)\n")
-cat(paste(rep("=", 60), collapse = ""), "\n", sep = "")
-print(
-  tabla_pronostico_arma10 |>
-    mutate(across(where(is.numeric), ~ round(.x, 3))),
-  row.names = FALSE
+imprimir_tabla_pronostico(
+  "Pronosticos 12 pasos adelante - ARMA(1,0)",
+  tabla_pronostico_arma10
 )
 
-cat("\n", paste(rep("=", 60), collapse = ""), "\n", sep = "")
-cat("Pronosticos 12 pasos adelante - ARMA(2,0)\n")
-cat(paste(rep("=", 60), collapse = ""), "\n", sep = "")
-print(
-  tabla_pronostico_arma20 |>
-    mutate(across(where(is.numeric), ~ round(.x, 3))),
-  row.names = FALSE
+imprimir_tabla_pronostico(
+  "Pronosticos 12 pasos adelante - ARMA(2,0)",
+  tabla_pronostico_arma20
 )
 
-cat("\n", paste(rep("=", 60), collapse = ""), "\n", sep = "")
-cat("Pronosticos 12 pasos adelante - ARMA(1,1)\n")
-cat(paste(rep("=", 60), collapse = ""), "\n", sep = "")
-print(
-  tabla_pronostico_arma11 |>
-    mutate(across(where(is.numeric), ~ round(.x, 3))),
-  row.names = FALSE
+imprimir_tabla_pronostico(
+  "Pronosticos 12 pasos adelante - ARMA(1,1)",
+  tabla_pronostico_arma11
 )
 
 # Colores para que coincidan con la descripcion de la grafica:

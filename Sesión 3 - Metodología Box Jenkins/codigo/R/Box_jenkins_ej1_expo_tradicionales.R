@@ -79,6 +79,7 @@ print(class(expo_base))
 print(head(expo_base)) # Primeras observaciones
 print(tail(expo_base)) # Últimas observaciones
 
+# Creación de la serie de tiempo de "exportaciones" ---
 
 # Creación del índice temporal de la serie de tiempo ---
 fechas_expo_base <- yearmonth(seq(
@@ -99,9 +100,6 @@ print(class(expo_serie))
 # Ver primeras y últimas observaciones de la base de datos, ahora con índice temporal
 print(head(expo_serie)) # Primeras observaciones
 print(tail(expo_serie)) # Últimas observaciones
-
-
-# Creación de la serie de tiempo de "exportaciones" ---
 
 # La nueva serie de tiempo se va a llamar "expo_serie" y va a tener valores numéricos
 expo_serie <- expo_serie |>
@@ -183,7 +181,7 @@ kpss_result <- ur.kpss(
   lags = "short"
 )
 
-# Nota: En prueba KPSS se interpreta al contrario que una prueba ADF.
+# Nota: La prueba KPSS se interpreta al contrario que una prueba ADF.
 #       Si no rechazo la H0 la serie es estacionaria
 #       y si rechazo la H0 la serie es no estacionaria.
 #       Con urca, se rechaza H0 si el estadístico es mayor que el valor crítico.
@@ -216,7 +214,8 @@ print(
     ggtime::autoplot(diff_expo) +
     ggtitle("Serie diferenciada") +
     xlab("Fecha") +
-    ylab("Valor")
+    ylab("Valor") + 
+    theme_light()
 )
 
 # Diferencia del logaritmo ---
@@ -234,7 +233,8 @@ print(
     ggtime::autoplot(log_diff) +
     ggtitle("Diferencia del logaritmo de la serie original") +
     xlab("Fecha") +
-    ylab("Valor")
+    ylab("Valor") + 
+    theme_light()
 )
 
 
@@ -324,7 +324,8 @@ print(
     ggtime::autoplot(.resid) +
     ggtitle("Residuales del modelo MA(1)") +
     xlab("Fecha") +
-    ylab("Valor")
+    ylab("Valor") +
+    theme_light()
 )
 
 # Descripción de los residuales
