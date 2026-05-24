@@ -716,3 +716,4 @@ plt.show()
 
 # Nota: Revise la validación de supuestos, la FAC y la FACP de la serie original, y los criterios
 #       de información y seleccione el modelo que considere mejor para modelar la serie! 
+# %%
