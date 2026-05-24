@@ -1,15 +1,21 @@
 # Importar paquetes -------------------------------------------------------------------
 
+# 
 library(fs)
 library(here)
 
+# 
 library(readr)
+library(dplyr)
 library(ggplot2)
 library(ggtime)
+
+#
 library(tsibble)
 library(feasts)
 library(fable)
-library(dplyr)
+
+# 
 library(tseries)
 library(FinTS)
 library(lmtest)
@@ -17,7 +23,7 @@ library(lmtest)
 # Evita que FinTS::ARIMA enmascare el estimador ARIMA de fable.
 ARIMA <- fable::ARIMA
 
-# Rutas -------------------------------------------------------------------
+# Cargar bases de datos en R usando reutas relativas ----------------------------------
 
 here::i_am("Sesion Metodología Box-Jenkins/codigo/r/box-jenkins.R")
 

@@ -333,33 +333,43 @@ for nombre, orden in modelos_serie_te.items():
 
 # %% Tabla resumen de modelos estimados
 
+# Inicialmente la tabla de modelos es una lista de python
 tabla_modelos = []
 
-# Itera sobre 
+# Se itera sobre los keys y values del diccionario "estimaciones_te_serie" 
 for nombre, resultado in estimaciones_te_serie.items():
-    params = resultado.params
-    errores = resultado.bse
+    # nombre: es la variable que itera en el nombre de los modelos
+    # resultado: es la variable que itera en la estimación de los modelos
+    params = resultado.params # Da los estimaciones de los parámetros del modelo
+    errores = resultado.bse # Da los errores estándar de las estimaciones de los parámetros del modelo
 
+    # Estimacioón del intercepto del modelo y su error estándar
     intercepto_sarimax = params.get("intercept", np.nan)
     se_intercepto_sarimax = errores.get("intercept", np.nan)
 
+    # Parámetros de la parte AR y MA
     ar1 = params.get("ar.L1", np.nan)
     ar2 = params.get("ar.L2", np.nan)
     ma1 = params.get("ma.L1", np.nan)
 
+    # Error estándar de la parte AR y MA
     se_ar1 = errores.get("ar.L1", np.nan)
     se_ar2 = errores.get("ar.L2", np.nan)
     se_ma1 = errores.get("ma.L1", np.nan)
 
+    # Media de largo plazo para los modelos AR
     ar1_mu = params.get("ar.L1", 0)
     ar2_mu = params.get("ar.L2", 0)
 
+    # Cálculo de la media dependiendo del tipo de modelo 
     if "ar.L1" in params.index or "ar.L2" in params.index:
         mu = intercepto_sarimax / (1 - ar1_mu - ar2_mu)
     else:
         mu = intercepto_sarimax
     se_mu = se_media_incondicional_sarimax(resultado)
 
+    # Se llena una a una la lista, con los resultados principales de las estimaciones
+    # Dichos resultados quedan como un diccionario, es decir se obtiene una lista de diccionarios. 
     tabla_modelos.append({
         "Modelo": nombre,
         "intercepto_sarimax": intercepto_sarimax,
@@ -376,20 +386,24 @@ for nombre, resultado in estimaciones_te_serie.items():
         "BIC": resultado.bic,
     })
 
+# Transformar la lista en un pandas DataFrame
 tabla_modelos_te = pd.DataFrame(tabla_modelos)
 
+# Nota: Hasta acá ya tenemos una tabla funcional. 
 
+# Especificar los valores de las estimaciones en la tabla
 def formato_estimacion(valor, decimales=3):
     if pd.isna(valor):
         return ""
     return f"{valor:.{decimales}f}"
 
-
+# Especificar los valores de los errores estándar en la tabla
 def formato_error_estandar(valor, decimales=3):
     if pd.isna(valor):
         return ""
     return f"({valor:.{decimales}f})"
 
+# Acá se generá la tabla final de publicación. 
 
 filas_tabla_publicacion = [
     ("a1", "a1", "se_a1"),
@@ -406,8 +420,10 @@ filas_tabla_publicacion = [
     ("BIC", "BIC", None),
 ]
 
+# Primero la tabla final es una lista
 tabla_publicacion = []
 
+# loop que llena la lista para la tabla final 
 for etiqueta, columna_valor, columna_error in filas_tabla_publicacion:
     fila = {"Parámetro": etiqueta}
 
@@ -425,39 +441,57 @@ for etiqueta, columna_valor, columna_error in filas_tabla_publicacion:
 
     tabla_publicacion.append(fila)
 
+# Genera la tabla final como un Pandas Dataframe
 tabla_modelos_te_publicacion = pd.DataFrame(tabla_publicacion)
 
+# Imprimir la tabla final en formato de texto
 print("\nTabla resumen de modelos estimados")
 print(tabla_modelos_te_publicacion.to_string(index=False))
 print("\nErrores estándar entre paréntesis.")
 
 
 # %% =========================
-# GRÁFICAS
+# Paso 2.3: Validación de Supuestos
 # ============================
 
+# Gráfica de los residuales, FAC de los residuales y FAC de los residuales al cuadrado
+
+# Genera una grilla de 3x3 en matplotlib 
 fig, axes = plt.subplots(3, 3, figsize=(14, 10))
 
+# Itero en cada uno de los nombres de los modelos
 for i, nombre in enumerate(nombres_modelos):
+    # Cuando uno itera en un objeto enumerate, 
+    # La primera variable de iteración (i) es un índice
+    # La segunda variable de iteración (nombre) es el nombre del modelo
+    
+    # Nota: Las iteraciones se dan modelo por modelo, una iteración por cada modelo 
+    
+    # Estimaciones de cada uno de los modelos
     resultado = estimaciones_te_serie[nombre]
 
+    #  Encontrar el orden p, q del modelo. 
     p = resultado.model.order[0]
     q = resultado.model.order[2]
     n_inicial = max(p, q, 1)
 
+    # Generar los residuales y los residuales al cuadrado para efectos de graficación y FACs
     residuos = resultado.resid.dropna().iloc[n_inicial:]
     residuos_cuadrado = residuos**2
 
+    # Gráfica de los residuales
     axes[i, 0].plot(
         residuos,
         color="black",
         linewidth=1
     )
 
-    axes[i, 0].set_title(f"Residuos {nombre}")
+    # labels de las gráficas de residuales
+    axes[i, 0].set_title(f"Residuales {nombre}")
     axes[i, 0].set_xlabel("Fecha")
-    axes[i, 0].set_ylabel("Residuo")
+    axes[i, 0].set_ylabel("Residuales")
 
+    # ACF de los residuales
     plot_acf(
         residuos,
         lags=15,
@@ -466,10 +500,12 @@ for i, nombre in enumerate(nombres_modelos):
         ax=axes[i, 1]
     )
 
+    # labels de las ACF de residuales
     axes[i, 1].set_title(f"FAC residuos {nombre}")
     axes[i, 1].set_xlabel("Rezago")
     axes[i, 1].set_ylabel("ACF")
 
+    # PACF de los residuales
     plot_acf(
         residuos_cuadrado,
         lags=15,
@@ -478,6 +514,7 @@ for i, nombre in enumerate(nombres_modelos):
         ax=axes[i, 2]
     )
 
+    # labels de las gráficas de residuales al cuadrado
     axes[i, 2].set_title(f"FAC residuos² {nombre}")
     axes[i, 2].set_xlabel("Rezago")
     axes[i, 2].set_ylabel("ACF")
@@ -486,32 +523,43 @@ plt.tight_layout()
 plt.show()
 
 
-# %% =========================
-# VALIDACIÓN SUPUESTOS
-# ============================
+# %% Tabla con los principales resultados de las prubas de validación de supuestos
 
+# La tabla con los resultados de las pruebas de validación de supuestos inicialmente será una lista 
 tabla_diagnostico = []
 
+# Itera a través de los nombres de los modelos y genero los resultados de cada test de validación
+# por modelo
 for nombre in nombres_modelos:
+    
+    # Nota: Cada iteración se da por modelo
+    
+    # Resultado de las estimaciones de cada modelo
     resultado = estimaciones_te_serie[nombre]
 
+    # Orden del modelo ARMA que se estimo 
     p = resultado.model.order[0]
     q = resultado.model.order[2]
     n_inicial = max(p, q, 1)
 
+    # Se obtienen los residuales 
     residuos = resultado.resid.dropna().iloc[n_inicial:]
 
+    # Prueba de Jarque Bera para los residuales
     jb_pvalue = jarque_bera(residuos).pvalue
 
+    # Prueba Arch para los residuales
     arch_1 = het_arch(residuos, nlags=1)[1]
     arch_2 = het_arch(residuos, nlags=2)[1]
     arch_5 = het_arch(residuos, nlags=5)[1]
 
+    # Prueba Ljung-box para los residuales
     ljung_box = acorr_ljungbox(
         residuos,
         lags=[5, 10, 20],
         return_df=True
     )
+
 
     tabla_diagnostico.append({
         "Modelo": nombre,
@@ -524,8 +572,106 @@ for nombre in nombres_modelos:
         "LB(20)": ljung_box.loc[20, "lb_pvalue"],
     })
 
+# Luego la tabla se transformará en un Pandas Dataframe
 tabla_diagnostico = pd.DataFrame(tabla_diagnostico)
 
 print(tabla_diagnostico.round(3))
+
+# %% =========================
+# Paso 2.4: Pronóstico
+# ============================
+
+# Se calculan pronósticos 12 pasos adelante para cada uno de los modelos estimados
+horizonte_pronostico = 12
+
+# Diccionario para almacenar los pronósticos que se usarán en la gráfica
+pronosticos_te = {}
+
+# Colores para que coincidan con la descripción de la gráfica:
+# ARMA(1,0), ARMA(2,0) y ARMA(1,1) en verde, azul y rojo, respectivamente.
+colores_pronostico = {
+    "ARMA(1,0)": "green",
+    "ARMA(2,0)": "blue",
+    "ARMA(1,1)": "red",
+}
+
+
+def calcular_pronostico_modelo(nombre):
+    """Genera la tabla de pronóstico de un modelo estimado."""
+    resultado = estimaciones_te_serie[nombre]
+
+    # Pronóstico 12 pasos adelante
+    pronostico_modelo = resultado.get_forecast(steps=horizonte_pronostico)
+
+    # Pronóstico puntual e intervalos de predicción
+    pronostico_puntual = pronostico_modelo.predicted_mean
+    intervalos = pronostico_modelo.conf_int()
+
+    # Guardar resultados para graficar
+    pronosticos_te[nombre] = {
+        "pronostico": pronostico_puntual,
+        "intervalos": intervalos,
+    }
+
+    # Tabla de pronósticos para cada modelo
+    return (
+        pd.DataFrame({
+            "pronostico": pronostico_puntual,
+            "limite_inferior": intervalos.iloc[:, 0],
+            "limite_superior": intervalos.iloc[:, 1],
+        })
+        .rename_axis("Fecha")
+        .reset_index()
+    )
+
+
+# Tabla 1: Pronóstico ARMA(1,0)
+tabla_pronostico_arma10 = calcular_pronostico_modelo("ARMA(1,0)")
+
+# Tabla 2: Pronóstico ARMA(2,0)
+tabla_pronostico_arma20 = calcular_pronostico_modelo("ARMA(2,0)")
+
+# Tabla 3: Pronóstico ARMA(1,1)
+tabla_pronostico_arma11 = calcular_pronostico_modelo("ARMA(1,1)")
+
+print("\n" + "=" * 60)
+print("Pronósticos 12 pasos adelante - ARMA(1,0)")
+print("=" * 60)
+print(tabla_pronostico_arma10.round(3).to_string(index=False))
+
+print("\n" + "=" * 60)
+print("Pronósticos 12 pasos adelante - ARMA(2,0)")
+print("=" * 60)
+print(tabla_pronostico_arma20.round(3).to_string(index=False))
+
+print("\n" + "=" * 60)
+print("Pronósticos 12 pasos adelante - ARMA(1,1)")
+print("=" * 60)
+print(tabla_pronostico_arma11.round(3).to_string(index=False))
+
+# Gráfica conjunta de los pronósticos
+plt.figure(figsize=(10, 5))
+plt.plot(
+    te_serie,
+    label="Datos históricos",
+    color="black",
+    linewidth=1
+)
+
+for nombre in nombres_modelos:
+    plt.plot(
+        pronosticos_te[nombre]["pronostico"],
+        label=nombre,
+        color=colores_pronostico[nombre],
+        linewidth=2
+    )
+
+plt.title("Pronósticos del precio internacional del té")
+plt.xlabel("Fecha")
+plt.ylabel("Precio del té")
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
 
 # %%
