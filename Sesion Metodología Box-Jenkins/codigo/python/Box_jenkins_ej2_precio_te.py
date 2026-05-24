@@ -14,6 +14,7 @@ from scipy.stats import jarque_bera
 # Módulos de statsmodels
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
+from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.stattools import adfuller, kpss
 
@@ -45,7 +46,7 @@ te_base = pd.read_csv(
 )
 
 # Ver el tipo de objeto de la base de datos (Pandas.DataFrame)
-print(type(expo_base))
+print(type(te_base))
 
 # Ver primeras y últimas observaciones de la base de datos
 print(te_base.head()) # Primeras observaciones
@@ -64,7 +65,7 @@ fechas_te_base = pd.date_range(
 te_base.index = fechas_te_base
 
 # El tipo de objeto de la base de datos sigue siendo Pandas.DataFrame
-print(type(expo_base))
+print(type(te_base))
 
 # Ver primeras y últimas observaciones de la base de datos, ahora con índice temporal
 print(te_base.head()) # Primeras observaciones
@@ -86,6 +87,7 @@ print(type(te_serie))
 
 # Ver algunas estadísticas descriptivas de la serie de tiempo 
 print(te_serie.describe())
+print(f"Media muestral precio del té: {te_serie.mean():.3f}")
 
 
 # %% =========================
@@ -102,7 +104,7 @@ plt.grid(True)
 plt.show()
 
 
-# %% FAC y FACP del precio del té
+# %% FAC y FACP del precio del té (serie original)
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -120,7 +122,6 @@ plot_pacf(
     te_serie,
     lags=15,
     alpha=0.05,
-    method="ywm",
     ax=axes[1]
 )
 
@@ -129,59 +130,218 @@ axes[1].set_title("FACP del precio del té")
 plt.tight_layout()
 plt.show()
 
+# %% Tests de Raíz Unitaria 
 
-# %% Logaritmo del precio del té
+# Test de Augmented Dickey Fuller (ADF)
+adf_result = adfuller(te_serie) # Test de Dickey Fuller sin intercepto y tendencia determínistica
 
-y_te_log = np.log(y_te)
+# Nota: En el test de ADF si no rechazo la H0 la serie no es estacionaria
+#       y si rechazo la H0 la serie es estacionaria. 
+
+print("=== Test ADF ===")
+print("Estadístico ADF:", adf_result[0])
+print("p-valor:", adf_result[1])
+print("Rezagos usados:", adf_result[2]) 
+print("Observaciones:", adf_result[3])
+print("Valores críticos:")
+for nivel, valor in adf_result[4].items():
+    print(f"{nivel}: {valor}")
+
+if adf_result[1] < 0.05:
+    print("ADF: Rechazamos H0. Según el test, la serie es estacionaria.")
+else:
+    print("ADF: No rechazamos H0. Según el test, la serie no es estacionaria.")
+
+# Test KPSS
+kpss_result = kpss(te_serie, regression="c", nlags="auto")
+
+# Nota: En prueba KPSS se interpreta al contario que una prueba ADF.
+#       Si no rechazo la H0 la serie es estacionaria
+#       y si rechazo la H0 la serie es no estacionaria. 
+
+print("\n=== Test KPSS ===")
+print("Estadístico KPSS:", kpss_result[0])
+print("p-valor:", kpss_result[1])
+print("Rezagos usados:", kpss_result[2])
+print("Valores críticos:")
+for nivel, valor in kpss_result[3].items():
+    print(f"{nivel}: {valor}")
+
+if kpss_result[1] < 0.05:
+    print("KPSS: rechazamos H0. Según el test, la serie es no estacionaria.")
+else:
+    print("KPSS: no rechazamos H0. Según el test, La serie es estacionaria.")
+
+# Nota: Según los resultados de la prueba ADF y KPSS, hay que 
+#       diferenciar la serie. 
+
+# %% Logaritmo del precio del té (en niveles)
+
+te_serie_log = np.log(te_serie)
 
 plt.figure(figsize=(10, 5))
-plt.plot(y_te_log)
+plt.plot(te_serie_log)
 plt.title("Logaritmo del precio internacional del té")
 plt.xlabel("Fecha")
 plt.ylabel("Log(Precio té)")
 plt.grid(True)
 plt.show()
 
+# %% FAC y FACP del precio del té (serie en logaritmos)
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+plot_acf(
+    te_serie_log,
+    lags=15,
+    alpha=0.05,
+    bartlett_confint=False,
+    ax=axes[0]
+)
+
+axes[0].set_title("FAC del logaritmo precio del té")
+
+plot_pacf(
+    te_serie_log,
+    lags=15,
+    alpha=0.05,
+    ax=axes[1]
+)
+
+axes[1].set_title("FACP del logaritmo precio del té")
+
+plt.tight_layout()
+plt.show()
+
+# %% Identificación del modelo usando FAC y FACP
+
+# En éste caso no es tan sencillo determinar el orden p y q del modelo ARIMA de la 
+# FAC y la FACP. 
+# Algunos modelos sugeridos por la FAC y la FACP son: ARMA(1,0), ARMA(2,0) y ARMA(1,1)
+
+# La FACP no decae tan rápidamente, pero si está decayendo.
+
+# P.d. También se usaran criterios de información para la 
+#      Selección de los ordenes p y q del modelo ARIMA. 
 
 # %% =========================
-# ESTIMACIÓN
+# Paso 2.2 Estimación 
 # ============================
 
-modelos_te = {
+# Se estimaran 3 modelos en éste caso, un ARIMA(1,0,0), un ARIMA(2,0,0) y un ARIMA(1,0,1)
+
+# Se crea un diccionari de python especificando los ordenes (p,q) de cada uno de los modelos
+# que se estimarán
+modelos_serie_te = {
     "ARMA(1,0)": (1, 0, 0),
     "ARMA(2,0)": (2, 0, 0),
     "ARMA(1,1)": (1, 0, 1),
 }
 
-resultados_te = {}
+nombres_modelos = list(modelos_serie_te.keys())
 
-for nombre, orden in modelos_te.items():
+# Diccionario que almacenara las estimaciones de cada uno de los modelos. Los "keys" del 
+# diccionario son los nombres de los modelos, y los "values" son las estimaciones de los modelos
+estimaciones_te_serie = {}
+
+# Función para calcular la media de largo plazo del modelo, a partir de los coeficientes
+# estimados en los modelos
+def media_incondicional_sarimax(resultado):
+    """Calcula E[y_t] para un modelo ARMA(p,q)"""
+    params = resultado.params
+    intercepto = params.get("intercept", 0)
+    suma_ar = sum(
+        valor
+        for parametro, valor in params.items()
+        if parametro.startswith("ar.L")
+    )
+    denominador = 1 - suma_ar
+
+    if np.isclose(denominador, 0):
+        return np.nan
+
+    return intercepto / denominador
+
+
+def se_media_incondicional_sarimax(resultado):
+    """Calcula el error estándar de la media incondicional usando método delta."""
+    params = resultado.params
+
+    if "intercept" not in params.index:
+        return np.nan
+
+    parametros_ar = [
+        parametro
+        for parametro in params.index
+        if parametro.startswith("ar.L")
+    ]
+    intercepto = params["intercept"]
+    denominador = 1 - sum(params[parametro] for parametro in parametros_ar)
+
+    if np.isclose(denominador, 0):
+        return np.nan
+
+    cov_params = resultado.cov_params()
+    gradiente = pd.Series(0.0, index=params.index)
+    gradiente["intercept"] = 1 / denominador
+
+    for parametro in parametros_ar:
+        gradiente[parametro] = intercepto / denominador**2
+
+    varianza_mu = float(gradiente @ cov_params @ gradiente)
+
+    if varianza_mu < 0:
+        return np.nan
+
+    return np.sqrt(varianza_mu)
+
+# El loop estima los 3 modelos ARMA propusetos en "modelos_serie_te"
+
+# Se itera sobre el diccionario "modelos_serie_te". "nombre" corresponde al nombre del modelo
+# y "orden" indica el orden (p,d,q) del modelo ARIMA. En éste caso se itera 3 veces, porque
+# el diccionario tiene 3 modelos. 
+for nombre, orden in modelos_serie_te.items():
+    
+    # Estimación de cada uno de los modelos
     modelo = SARIMAX(
-        y_te,
+        te_serie,
         order=orden,
         trend="c",
         enforce_stationarity=False,
         enforce_invertibility=False
-    )
+    ) 
+    
+    # Nota: Se estima cada uno de los modelos en nivel
 
-    resultado = modelo.fit(disp=False)
-    resultados_te[nombre] = resultado
+    # Se estima el modelo 
+    estimacion_modelo = modelo.fit(disp=False)
+    
+    # Nota: El método de estimación es máxima verosimilitud 
+    #       sobre la representación del modelo en un espacio de estados
+    
+    # Se llena el diccionario de modelos estimados. Los "keys" del diccionario serán los nombres
+    # de los modelos y los "values" del diccionario son las estimaciones de los modelos
+    estimaciones_te_serie[nombre] = estimacion_modelo
 
     print("\n", nombre)
-    print(resultado.summary())
+    print(estimacion_modelo.summary())
+    print("\n")
+    print(
+        "Media incondicional implícita en SARIMAX "
+        f"c / (1 - suma AR): {media_incondicional_sarimax(estimacion_modelo):.3f}"
+    )
 
-
-# %% =========================
-# Tabla resumen de modelos estimados
-# ============================
+# %% Tabla resumen de modelos estimados
 
 tabla_modelos = []
 
-for nombre, resultado in resultados_te.items():
+# Itera sobre 
+for nombre, resultado in estimaciones_te_serie.items():
     params = resultado.params
     errores = resultado.bse
 
-    intercepto = params.get("intercept", np.nan)
+    intercepto_sarimax = params.get("intercept", np.nan)
+    se_intercepto_sarimax = errores.get("intercept", np.nan)
 
     ar1 = params.get("ar.L1", np.nan)
     ar2 = params.get("ar.L2", np.nan)
@@ -195,26 +355,81 @@ for nombre, resultado in resultados_te.items():
     ar2_mu = params.get("ar.L2", 0)
 
     if "ar.L1" in params.index or "ar.L2" in params.index:
-        mu = intercepto / (1 - ar1_mu - ar2_mu)
+        mu = intercepto_sarimax / (1 - ar1_mu - ar2_mu)
     else:
-        mu = intercepto
+        mu = intercepto_sarimax
+    se_mu = se_media_incondicional_sarimax(resultado)
 
     tabla_modelos.append({
         "Modelo": nombre,
+        "intercepto_sarimax": intercepto_sarimax,
+        "se_intercepto_sarimax": se_intercepto_sarimax,
+        "media_incondicional": mu,
+        "se_media_incondicional": se_mu,
         "a1": ar1,
         "se_a1": se_ar1,
         "a2": ar2,
         "se_a2": se_ar2,
         "b1": ma1,
         "se_b1": se_ma1,
-        "mu": mu,
         "AIC": resultado.aic,
         "BIC": resultado.bic,
     })
 
 tabla_modelos_te = pd.DataFrame(tabla_modelos)
 
-print(tabla_modelos_te.round(3))
+
+def formato_estimacion(valor, decimales=3):
+    if pd.isna(valor):
+        return ""
+    return f"{valor:.{decimales}f}"
+
+
+def formato_error_estandar(valor, decimales=3):
+    if pd.isna(valor):
+        return ""
+    return f"({valor:.{decimales}f})"
+
+
+filas_tabla_publicacion = [
+    ("a1", "a1", "se_a1"),
+    ("", "se_a1", None),
+    ("a2", "a2", "se_a2"),
+    ("", "se_a2", None),
+    ("b1", "b1", "se_b1"),
+    ("", "se_b1", None),
+    ("intercepto SARIMAX", "intercepto_sarimax", "se_intercepto_sarimax"),
+    ("", "se_intercepto_sarimax", None),
+    ("media incondicional", "media_incondicional", "se_media_incondicional"),
+    ("", "se_media_incondicional", None),
+    ("AIC", "AIC", None),
+    ("BIC", "BIC", None),
+]
+
+tabla_publicacion = []
+
+for etiqueta, columna_valor, columna_error in filas_tabla_publicacion:
+    fila = {"Parámetro": etiqueta}
+
+    for nombre in nombres_modelos:
+        modelo = tabla_modelos_te.loc[
+            tabla_modelos_te["Modelo"] == nombre
+        ].iloc[0]
+
+        if columna_error is None and columna_valor.startswith("se_"):
+            fila[nombre] = formato_error_estandar(modelo[columna_valor])
+        elif columna_valor in ["AIC", "BIC"]:
+            fila[nombre] = formato_estimacion(modelo[columna_valor], decimales=1)
+        else:
+            fila[nombre] = formato_estimacion(modelo[columna_valor])
+
+    tabla_publicacion.append(fila)
+
+tabla_modelos_te_publicacion = pd.DataFrame(tabla_publicacion)
+
+print("\nTabla resumen de modelos estimados")
+print(tabla_modelos_te_publicacion.to_string(index=False))
+print("\nErrores estándar entre paréntesis.")
 
 
 # %% =========================
@@ -223,10 +438,8 @@ print(tabla_modelos_te.round(3))
 
 fig, axes = plt.subplots(3, 3, figsize=(14, 10))
 
-nombres_modelos = ["ARMA(1,0)", "ARMA(2,0)", "ARMA(1,1)"]
-
 for i, nombre in enumerate(nombres_modelos):
-    resultado = resultados_te[nombre]
+    resultado = estimaciones_te_serie[nombre]
 
     p = resultado.model.order[0]
     q = resultado.model.order[2]
@@ -280,7 +493,7 @@ plt.show()
 tabla_diagnostico = []
 
 for nombre in nombres_modelos:
-    resultado = resultados_te[nombre]
+    resultado = estimaciones_te_serie[nombre]
 
     p = resultado.model.order[0]
     q = resultado.model.order[2]
