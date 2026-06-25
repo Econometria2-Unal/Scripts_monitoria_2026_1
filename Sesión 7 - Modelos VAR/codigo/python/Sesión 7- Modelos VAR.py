@@ -16,7 +16,7 @@
 #
 #  Instalación de paquetes
 # 1. Creación de serie simulada 
-# 2. Metodologpia Box-Jenkins para series multivariadas
+# 2. Metodologia Box-Jenkins para series multivariadas
 #  2.1. Identificación
 #  2.2. Estimación
 #  2.3. Validación de supuestos
