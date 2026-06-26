@@ -133,26 +133,17 @@ graficar_diagnostico_errores = function(u_t, errores, cor_u_muestral = cor(u_t),
 
 # 3. Funciones auxiliares para impulso-respuesta ----
 
-impulso_respuesta = function(var, impulso, respuesta, pasos_adelante, ortog, 
-                             int_conf, titulo){
-  
-  "Funcion disenada por German Camilo Rodriguez"
-  
-  "Calcula las funciones impulso respuesta ortogonalizadas y no ortogonalizadas 
-  y devuelve una grafica IRF o OIRF dependiendo la especificacion"
-  
-  total_pasos_futuros = length(pasos_adelante) - 1
-  IRF = irf(var, impulse = impulso, response = respuesta,
-            n.ahead = total_pasos_futuros, ortho = ortog, ci = int_conf)
-  
-  IRF_data_frame = data.frame(
+extraer_datos_irf = function(IRF, impulso, respuesta, pasos_adelante){
+  data.frame(
     pasos_adelante = pasos_adelante,
     irf = as.numeric(IRF$irf[[impulso]][, respuesta]),
     inferior = as.numeric(IRF$Lower[[impulso]][, respuesta]),
     superior = as.numeric(IRF$Upper[[impulso]][, respuesta])
   )
-  
-  graph = IRF_data_frame %>% 
+}
+
+graficar_datos_irf = function(IRF_data_frame, titulo){
+  IRF_data_frame %>% 
     ggplot(aes(x = pasos_adelante, y = irf, ymin = inferior, 
                ymax = superior)) +
     geom_hline(yintercept = 0, color = "red") +
@@ -164,6 +155,60 @@ impulso_respuesta = function(var, impulso, respuesta, pasos_adelante, ortog,
     xlab("Pasos adelante") +
     theme(plot.title = element_text(size = 11, hjust = 0.5),
           axis.title.y = element_text(size = 11))    
+}
+
+graficar_irf_extraida = function(IRF, impulso, respuesta, pasos_adelante, titulo){
+  extraer_datos_irf(IRF, impulso, respuesta, pasos_adelante) %>% 
+    graficar_datos_irf(titulo)
+}
+
+impulso_respuesta = function(var, impulso, respuesta, pasos_adelante, ortog, 
+                             int_conf, titulo, semilla = NULL, runs = 100){
+  
+  "Funcion disenada por German Camilo Rodriguez"
+  
+  "Calcula las funciones impulso respuesta ortogonalizadas y no ortogonalizadas 
+  y devuelve una grafica IRF o OIRF dependiendo la especificacion"
+  
+  total_pasos_futuros = length(pasos_adelante) - 1
+  IRF = irf(var, impulse = impulso, response = respuesta,
+            n.ahead = total_pasos_futuros, ortho = ortog, ci = int_conf,
+            seed = semilla, runs = runs)
+  
+  graph = graficar_irf_extraida(IRF, impulso, respuesta, pasos_adelante, titulo)
   
   return(graph)
+}
+
+graficar_grilla_irf = function(var, variables, pasos_adelante, ortog, int_conf,
+                               prefijo_titulo, semilla = NULL, runs = 100){
+  
+  total_pasos_futuros = length(pasos_adelante) - 1
+  
+  IRF = irf(var, impulse = variables, response = variables,
+            n.ahead = total_pasos_futuros, ortho = ortog, ci = int_conf,
+            seed = semilla, runs = runs)
+  
+  combinaciones = expand.grid(impulso = variables, respuesta = variables,
+                              stringsAsFactors = FALSE) %>% 
+    as_tibble() %>% 
+    mutate(
+      impulso_titulo = gsub("_", "", impulso),
+      respuesta_titulo = gsub("_", "", respuesta),
+      titulo = paste0(prefijo_titulo, " de ", impulso_titulo,
+                      " - respuesta de ", respuesta_titulo)
+    )
+  
+  graficas = pmap(
+    list(combinaciones$impulso, combinaciones$respuesta, combinaciones$titulo),
+    function(impulso, respuesta, titulo){
+      graficar_irf_extraida(IRF, impulso, respuesta, pasos_adelante, titulo)
+    }
+  )
+  
+  list(
+    objeto_irf = IRF,
+    combinaciones = combinaciones,
+    graficas = graficas
+  )
 }

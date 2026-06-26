@@ -424,36 +424,24 @@ Phi(V.dr, nstep=10) # Esta función nos calcula la matriz de coeficientes de
 
 # Definimos el número pasos adelante
 pasos_adelante = 0:18
+int_conf_irf = 0.95
+semilla_irf = 202601
+repeticiones_bootstrap_irf = 100
 
-# La función impulso_respuesta() se importa desde el script
-# "funciones_auxiliares_graficacion_VAR.R"
-
-# IRF de las variables del sistema ante distintos choques exógenos.
-y1_y1 = impulso_respuesta(V.dr, "y_1", "y_1", pasos_adelante, ortog = FALSE,
-                          int_conf = 0.95, titulo = "Impulso de y1 - respuesta de y1")
-y1_y2 = impulso_respuesta(V.dr, "y_1", "y_2", pasos_adelante, ortog = FALSE,
-                          int_conf = 0.95, titulo = "Impulso de y1 - respuesta de y2")
-y1_y3 = impulso_respuesta(V.dr, "y_1", "y_3", pasos_adelante, ortog = FALSE,
-                          int_conf = 0.95, titulo = "Impulso de y1 - respuesta de y3")
-y2_y1 = impulso_respuesta(V.dr, "y_2", "y_1", pasos_adelante, ortog = FALSE,
-                          int_conf = 0.95, titulo = "Impulso de y2 - respuesta de y1")
-y2_y2 = impulso_respuesta(V.dr, "y_2", "y_2", pasos_adelante, ortog = FALSE, 
-                          int_conf = 0.95, titulo = "Impulso de y2 - respuesta de y2")
-y2_y3 = impulso_respuesta(V.dr, "y_2", "y_3", pasos_adelante, ortog = FALSE, 
-                          int_conf = 0.95, titulo = "Impulso de y2 - respuesta de y3")
-y3_y1 = impulso_respuesta(V.dr, "y_3", "y_1", pasos_adelante, ortog = FALSE,
-                          int_conf = 0.95, titulo = "Impulso de y3 - respuesta de y1")
-y3_y2 = impulso_respuesta(V.dr, "y_3", "y_2", pasos_adelante, ortog = FALSE, 
-                          int_conf = 0.95, titulo = "Impulso de y3 - respuesta de y2")
-y3_y3 = impulso_respuesta(V.dr, "y_3", "y_3", pasos_adelante, ortog = FALSE, 
-                          int_conf = 0.95, titulo = "Impulso de y3 - respuesta de y3")
+# La funcion graficar_grilla_irf() calcula el objeto irf() una sola vez
+# y luego crea cada panel con programacion funcional.
+# IRF de las variables del sistema ante distintos choques exogenos.
+irf_no_ortog = graficar_grilla_irf(V.dr, variables, pasos_adelante,
+                                   ortog = FALSE, int_conf = int_conf_irf,
+                                   prefijo_titulo = "Impulso",
+                                   semilla = semilla_irf,
+                                   runs = repeticiones_bootstrap_irf)
 
 x11()
 # Grilla de IRF: columnas = impulsos; filas = respuestas.
-grid.arrange(y1_y1,y2_y1,y3_y1,
-             y1_y2,y2_y2,y3_y2,
-             y1_y3,y2_y3,y3_y3,
-             layout_matrix = matrix(1:9, nrow = 3, byrow = TRUE))
+grid.arrange(grobs = irf_no_ortog$graficas,
+             layout_matrix = matrix(seq_along(irf_no_ortog$graficas),
+                                    nrow = length(variables), byrow = TRUE))
 
 # Funciones de impulso respuesta ortogonalizadas ===
 
@@ -472,38 +460,19 @@ Psi(V.dr, nstep=10) # Esta función nos calcula la matriz de coeficientes de
 
 # Graficación de las IRFs
 
-# Definimos el número pasos adelante
-pasos_adelante = 0:18
-
-# La función impulso_respuesta() se importa desde el script
-# "funciones_auxiliares_graficacion_VAR.R"
-
-# IRFs ortogonalizadas de las variables del sistema ante distintos choques exógenos.
-y1_y1_ortog = impulso_respuesta(V.dr, "y_1", "y_1", pasos_adelante, ortog = TRUE,
-                                int_conf = 0.95, titulo = "Impulso ortogonal de y1 - respuesta de y1")
-y1_y2_ortog = impulso_respuesta(V.dr, "y_1", "y_2", pasos_adelante, ortog = TRUE,
-                                int_conf = 0.95, titulo = "Impulso ortogonal de y1 - respuesta de y2")
-y1_y3_ortog = impulso_respuesta(V.dr, "y_1", "y_3", pasos_adelante, ortog = TRUE,
-                                int_conf = 0.95, titulo = "Impulso ortogonal de y1 - respuesta de y3")
-y2_y1_ortog = impulso_respuesta(V.dr, "y_2", "y_1", pasos_adelante, ortog = TRUE,
-                                int_conf = 0.95, titulo = "Impulso ortogonal de y2 - respuesta de y1")
-y2_y2_ortog = impulso_respuesta(V.dr, "y_2", "y_2", pasos_adelante, ortog = TRUE,
-                                int_conf = 0.95, titulo = "Impulso ortogonal de y2 - respuesta de y2")
-y2_y3_ortog = impulso_respuesta(V.dr, "y_2", "y_3", pasos_adelante, ortog = TRUE,
-                                int_conf = 0.95, titulo = "Impulso ortogonal de y2 - respuesta de y3")
-y3_y1_ortog = impulso_respuesta(V.dr, "y_3", "y_1", pasos_adelante, ortog = TRUE,
-                                int_conf = 0.95, titulo = "Impulso ortogonal de y3 - respuesta de y1")
-y3_y2_ortog = impulso_respuesta(V.dr, "y_3", "y_2", pasos_adelante, ortog = TRUE,
-                                int_conf = 0.95, titulo = "Impulso ortogonal de y3 - respuesta de y2")
-y3_y3_ortog = impulso_respuesta(V.dr, "y_3", "y_3", pasos_adelante, ortog = TRUE,
-                                int_conf = 0.95, titulo = "Impulso ortogonal de y3 - respuesta de y3")
+# Usamos los mismos pasos adelante, intervalo de confianza y semilla.
+# IRFs ortogonalizadas de las variables del sistema ante distintos choques exogenos.
+irf_ortog = graficar_grilla_irf(V.dr, variables, pasos_adelante,
+                                ortog = TRUE, int_conf = int_conf_irf,
+                                prefijo_titulo = "Impulso ortogonal",
+                                semilla = semilla_irf,
+                                runs = repeticiones_bootstrap_irf)
 
 x11()
 # Grilla de OIRF: columnas = impulsos; filas = respuestas.
-grid.arrange(y1_y1_ortog,y2_y1_ortog,y3_y1_ortog,
-             y1_y2_ortog,y2_y2_ortog,y3_y2_ortog,
-             y1_y3_ortog,y2_y3_ortog,y3_y3_ortog,
-             layout_matrix = matrix(1:9, nrow = 3, byrow = TRUE))
+grid.arrange(grobs = irf_ortog$graficas,
+             layout_matrix = matrix(seq_along(irf_ortog$graficas),
+                                    nrow = length(variables), byrow = TRUE))
 
 
 # Descomposición de varianza del error de pronóstico ===
