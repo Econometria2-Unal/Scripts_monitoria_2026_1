@@ -16,11 +16,12 @@
 #'  1.2 Simulación de los errores en forma reducida " u_t "
 #'    1.2.1 Construcción de los errores " u_t " usando descomposición de Cholesky
 #'    1.2.2 Propiedades de los errores en forma reducida " u_t "
+#'  1.3 Simulación del VAR(1) de 3 variables
 #' 2. Metodologia Box-Jenkins para series multivariadas
 #'  2.1. Identificación
 #'  2.2. Estimación
 #'  2.3. Validación de supuestos
-#'  2.4. Pronóstico y funciones Impulso respuesta 
+#'  2.4. Uso del modelo: pronóstico y funciones Impulso respuesta (IRF)
 
 
 # Nota: Tips prácticos en R
@@ -99,7 +100,15 @@ Y_t <- matrix(0, nrow = T, ncol = length(variables),
 
 # 1.2 Simulación de los errores en forma reducida " u_t " ----
 
-
+#===
+# Nota: Tenga presente que esta es la parte más importante de toda la simulación 
+#       Dado que la forma en la que se simulan dichos errores, determinará
+#       todas las características de las series simuladas Y_t. Ésto ocurre, porque
+#       a partir de u_t, usando la fórmula Y_t = A_0 + A_1 Y_{t-1} + u_t es que
+#       se construyen la serie Y_t. Por tanto, lo crucial de la simulación, 
+#       es simular de manera correcta la distribución de los errores en forma 
+#       reducida "u_t".
+#===
 
 # En esta simulación se quiere que los errores estén correlacionados y que,
 # además, tengan desviaciones estándar diferentes. Para ello simulamos:
@@ -121,13 +130,16 @@ Y_t <- matrix(0, nrow = T, ncol = length(variables),
 # para la relación contemporánea. La matriz A_1, definida más abajo, gobierna
 # los efectos rezagados y no necesita ser triangular para usar 
 # la Descomposición de Cholesky.
-#
-# Nota: Tenga presente que esta es la parte más importante de toda la simulación 
 
 
 # 1.2.1 Construcción de los errores " u_t " usando descomposición de Cholesky ----
 
-# Nota: 
+# Acá en la simulación partimos al revés de la metodología de Box Jenkins. 
+# Inicialmente, definimos la matriz de la descomposición de Cholesky "P_chol" 
+# porque ella cumple dos roles importantes: 
+  # 1. Determina el orden de exogenidad de las variables: y1, y2 y y3. 
+  # 2. Determina la estructura de correlación de la matriz de varianzas y covarianzas
+  #    de los errores (i.e. de la matriz Sigma_u_teorica, definida abajo.)
 
 P_chol = matrix(c(0.70, 0.00, 0.00,
                   0.35, 1.10, 0.00,
@@ -135,35 +147,38 @@ P_chol = matrix(c(0.70, 0.00, 0.00,
                 nrow = 3, byrow = TRUE,
                 dimnames = list(errores, c("eps_1", "eps_2", "eps_3")))
 
-Sigma_u_teorica = P_chol %*% t(P_chol)
-Sigma_u_teorica
+# Matriz de varianzas-covarianzas teórica de la distribución normal multivariada
+Sigma_u_teorica = P_chol %*% t(P_chol); Sigma_u_teorica
 
-cor_u_teorica = cov2cor(Sigma_u_teorica)
-cor_u_teorica
+# Matriz de Correlaciones teórica
+cor_u_teorica = cov2cor(Sigma_u_teorica); cor_u_teorica
 
-desv_u_teoricas = sqrt(diag(Sigma_u_teorica))
-desv_u_teoricas
+# Desviaciones estándar teóricas de los errores en forma reducida
+desv_u_teoricas = sqrt(diag(Sigma_u_teorica)); desv_u_teoricas
 
-# Simulación automática desde una normal multivariada.
-# MASS::mvrnorm() y mvtnorm::rmvnorm() son funciones estándar en R para simular:
-#
-#   u_t ~ N_3(0, Sigma_u)
-#
-# Se dejan ambas alternativas disponibles. Para la simulación principal del VAR
-# usamos u_t_mvtnorm, porque permite indicar explícitamente method = "chol".
+
+# Nota: Existen dos formas de simular una distribución normal multivariada 
+# (e.g. u_t ~ N_3(0, Sigma_u)) en R: 
+  # MASS::mvrnorm() 
+  # mvtnorm::rmvnorm()
+
+# La media de los errores en forma reducida será el vector de ceros
 media_u = rep(0, length(errores))
 names(media_u) = errores
 
-set.seed(semilla_simulacion)
+# Errores en forma reducida " u_t " simulados de una normal trivariada
+# usando el paquete MASS
 u_t_mass = MASS::mvrnorm(n = T, mu = media_u, Sigma = Sigma_u_teorica)
 colnames(u_t_mass) = errores
 
-set.seed(semilla_simulacion)
+# Errores en forma reducida " u_t " simulados de una normal trivariada
+# usando el paquete mvtnorm
 u_t_mvtnorm = mvtnorm::rmvnorm(n = T, mean = media_u, sigma = Sigma_u_teorica,
                                method = "chol")
 colnames(u_t_mvtnorm) = errores
 
-# Errores usados en la simulación del VAR.
+# Nota: Para la simulación del moderlo VAR, se usaran los errores que se obtienen
+#       de la simulación de una distribución normal trivariada del paquete "mvtnorm"
 u_t = u_t_mvtnorm
 
 # 1.2.2 Propiedades de los errores en forma reducida " u_t " ----
@@ -194,6 +209,11 @@ x11();grid.arrange(graficos_errores$series,
 x11();grid.arrange(graficos_errores$qq,
                    graficos_errores$correlacion, ncol = 2)
 
+# 1.3 Simulación del VAR(1) de 3 variables ----
+
+# Nota: Recuerde que Se va a simular un modelo VAR(1) cuya ecuación está dada por: 
+## Y_t = A_0 + A_1 Y_{t-1} + u_t
+
 # Definimos el vector constante A_0
 A_0 = c(0.5, 0.2, -0.1); A_0 
 
@@ -210,41 +230,46 @@ A_1 = matrix(c(0.35, 0.08, 0.04,
 # recursivo y_1, y_2, y_3 se mantiene por el orden de las columnas de Y_t y por
 # la estructura triangular de P_chol, no porque A_1 sea triangular.
 
-# Nota: La idea de la simulación 
+# Nota: La idea de la simulación es: 
+#       Dado que conocemos A_0, A_1 y ya simulamos los errores u_t de una 
+#       distribución normal trivariada cuya matriz de varianza y varianzas 
+#       está dada por: "Sigma_u_teorica = P_chol %*% t(P_chol)", procedemos
+#       a llenar fila a fila la matriz Y_t usando al ecuación dinámica del VAR: 
+#       Y_t = A_0 + A_1 Y_{t-1} + u_t
 
-# Función que permite simular un VAR(1) 
+# Función que permite simular el VAR(1) de manera recursiva mediante un loop: 
 
 sim_VAR1 = function(Y_t, A_0, A_1, u_t, T){
   for (i in 2:T) {
-    # Se usa la fórmula de un VAR(1) para llenar cada una de las filas de Y_t
+    # Se usa la fórmula de un VAR(1): Y_t = A_0 + A_1 Y_{t-1} + u_t
+    # Para llenar cada una de las filas de Y_t
     Y_t[i,] = as.numeric(A_0 + A_1 %*% Y_t[i-1,] + u_t[i,]) # Y_t = A_0 + A_1 Y_{t-1} + u_t
   }  
   return(Y_t)
 }
 
-# Nota: La simulación lo que busca es modelar las variables a partir de la 
-#       fórmula de un VAR(1) en forma reducida: Y_t = A_0 + A_1 Y_{t-1} + u_t
-
 # Nota: La función sim_VAR1 lo que busca es llenar mediante un ciclo, cada una 
-#       de las filas (iteración por iteración) de Y_t. La matriz  
-Y_t = sim_VAR1(Y_t, A_0, A_1, u_t, T) # 
-                            # de ceros Y_t con valores
+#       de las filas (iteración por iteración) de Y_t. La matriz Y_t pasa de ser una
+#       matriz de ceros, a una matriz que contendrás los valores de las series 
+#       simuladas. Note que, como se construyo la matriz de varianzas y covarianzas
+#       "Sigma_u_teorica = P_chol %*% t(P_chol)" usando descomposición de Cholesky, 
+#       existe un orden natural de las variables a simular, a saber: y1 es la variable 
+#       más exogena, luego le sigue y_2 y por último la variable menos exógena 
+#       (o más endógena) es y_3
+Y_t = sim_VAR1(Y_t, A_0, A_1, u_t, T) 
 
 # Convertimos la serie en un objeto de serie de tiempo "ts"
 Y_t = ts(Y_t, start=c(1900,1), frequency=4)
 
-
-#~~~~~~~~~~~~~~~~~~~~~~#
-# Gráficas de la serie #
-#~~~~~~~~~~~~~~~~~~~~~~#
-
+# Gráficas de la series simuladas: 
 y1 = graficar_ts(Y_t[,"y_1"], titulo = "Variable y_1", color = "lightblue")
 y2 = graficar_ts(Y_t[,"y_2"], titulo = "Variable y_2", color = "royalblue")
 y3 = graficar_ts(Y_t[,"y_3"], titulo = "Variable y_3", color = "darkorange")
 
 x11();grid.arrange(y1,y2,y3,ncol=3)
 
-# Recuerden que los modelos VAR requieren de series estacionarias. 
+# Nota: Recuerden que los modelos VAR requieren de series estacionarias. Por tanto, 
+#       empleamos Test ADF para verificar la estacionariedad de las series. 
 
 adf1= ur.df(Y_t[,"y_1"], lags=3,selectlags = "AIC",type="none")
 summary(adf1) # Rechazo H0, la serie es I(0)
@@ -255,17 +280,18 @@ summary(adf2) # Rechazo H0, la serie es I(0)
 adf3= ur.df(Y_t[,"y_3"], lags=3,selectlags = "AIC",type="none")
 summary(adf3) # Rechazo H0, la serie es I(0)
 
+# ===
+# 2. Metodología Box-Jenkins para series multivariadas ====
+# ===
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-#### 2. Metodología Box-Jenkins para series multivariadas ####
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+# ===
+# 2.1. Identificación ====
+# ===
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-###### 2.1. Identificación ####
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+# Ya tenemos las series simuladas en la matriz Y_t, por lo que ya es posible aplicar
+# la metodología Box-Jenkins en las series simuladas que se encuentran en Y_t. 
 
-# Ya tenemos nuestra serie multivariada, veamos que rezago nos recomienda la 
-# función VARselect() 
+# Beamos que rezago nos recomienda la función VARselect() 
 
 # Selección de rezagos para un VAR con tendencia e intercepto.
 VARselect(Y_t, lag.max=6,type = "both", season = NULL)
@@ -279,11 +305,11 @@ VARselect(Y_t, lag.max=6,type = "none", season = NULL)
 # Como el proceso generador de datos es un VAR(1), esperamos que los criterios
 # de información favorezcan rezagos bajos, especialmente p = 1.
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~#
-###### 2.2. Estimación ####
-#~~~~~~~~~~~~~~~~~~~~~~~~~#
+# ===
+# 2.2. Estimación ====
+# ===
 
-# Para seleccionar el VAR(1), verificamos si tiene intercepto y deriva
+# Para seleccionar el VAR(1), verificamos si tiene intercepto y deriva:
 
 # VAR con tendencia e intercepto
 V.tr = VAR(Y_t, p=1, type="both", season=NULL)
@@ -291,7 +317,7 @@ summary(V.tr) # La tendencia no es significativa, analizamos const
 
 # VAR con intercepto.
 V.dr= VAR(Y_t, p=1, type="const", season=NULL) 
-summary(V.dr) # El intercepto es significativo en una ecuación, veamos none
+summary(V.dr) # El intercepto es significativo en dos de las 3 ecuaciones
 
 # VAR sin términos determinísticos.
 V.no = VAR(Y_t, p=1, type="none", season=NULL)  
@@ -300,34 +326,42 @@ summary(V.no)
 # Elegimos el modelo con constante, pues se ha visto que tienen constante signi-
 # ficativa.
 
-# Raíces del proceso. Deben ser menores a |1| para que sea estacionario. 
+# Estabilidad del VAR(1):
+
+# Nota: Los valores propios de la matriz A_1 deben ser en valor absoluto menores 
+# a 1 para que el VAR(1) sea estacionario, con ello se garantiza que sus inversos 
+# múltiplicativos, que son las raíces del polinomio característico asociado al 
+# proceso VAR, sean en valor absoluto mayores a 1 y se pueda garantizar la 
+# estabilidad del proceso.
 
 roots(V.dr) #El proceso es estable.
 
-# Ahora analizamos cada uno de los coeficientes estimados. 
+# Coeficientes estimados del VAR(1):
 
-#Coeficientes:
+# Podemos ver todos los coeficientes con Bcoef
+Bcoef(V.dr) 
 
-Bcoef(V.dr) # Podemos ver todos los coeficientes con Bcoef
-
+# Matriz teóricas "A1" vs matriz estimada "Acoef(V.dr)"
 
 A_1 # Matriz teórica usada en la simulación.
-Acoef(V.dr) # Las estimaciones deberían ser cercanas a A_1.
+A_1_sim = Acoef(V.dr); A_1_sim # Las estimaciones deberían ser cercanas a A_1.
 
-# Matriz de varianzas y covarianzas de los residuales
+# Matriz de varianzas y covarianzas de los residuales teórica vs estimada
 
-Sigma.est = summary(V.dr)$covres
-Sigma.est 
+# Matriz de varianzas y covarianzas téorica
+Sigma_u_teorica
 
-# Análisis en conjunto
+# Matriz de varianzas y covarianzas estimada
+Sigma.est = summary(V.dr)$covres; Sigma.est 
+
+# Análisis de todos el modelo VAR(1) estimado
 summary(V.dr)
 
+# ===
+# 2.3. Validación de supuestos ====
+# ===
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-###### 2.3. Validación de supuestos ####
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-
-#~~ No autocorrelación serial ~~#
+# No autocorrelación serial ===
 
 # PT.asymptotic es para muestra grande y "PT.adjusted" para muestra pequeña.
 P.75=serial.test(V.dr, lags.pt = 75, type = "PT.asymptotic");P.75 # No rechazo
@@ -336,7 +370,7 @@ P.20=serial.test(V.dr, lags.pt = 20, type = "PT.asymptotic");P.20 # No rechazo
 P.10=serial.test(V.dr, lags.pt = 10, type = "PT.asymptotic");P.10 # No rechazo
 
 
-# Graficamos los residuales para 20 pasos_adelantes: se grafican los residuales, 
+# Graficamos los resultados del test usando 20 residuos: Se grafican los residuales, 
 # su distribución, la ACF y PACF de los residuales y a ACF y PACF de los 
 # residuales al cuadrado (proxy para heterocedasticidad)
 
@@ -345,24 +379,28 @@ plot(P.20, names = "y_1") # Residuales de la primera serie
 plot(P.20, names = "y_2") # Residuales de la segunda serie
 plot(P.20, names = "y_3") # Residuales de la tercera serie
 
-#~~ Homocedasticidad ~~#
+# Nota: Se cumple el supuesto de no autocorrelación serial en los residuales
+
+# Homocedasticidad ===
 
 # Test tipo ARCH multivariado
 arch.test(V.dr, lags.multi = 24, multivariate.only = TRUE) # No rechazo
 arch.test(V.dr, lags.multi = 12, multivariate.only = TRUE) # No rechazo
 
-#~~ Normalidad ~~#
+# Nota: Se cumple el supuesto de homocedasticidad
+
+# Normalidad ===
 
 # Jarque-Bera para series multivariadas.  
 normality.test(V.dr) #No rechazo, se cumple el supuesto.
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-###### 2.4. Pronóstico y funciones Impulso respuesta ####
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+# Nota: Se cumple el supuesto de normalidad
 
-#~~~~~~~~~~~~#
-# Pronóstico #
-#~~~~~~~~~~~~#
+# ===
+# 2.4. Uso del modelo: pronóstico y funciones Impulso respuesta (IRF) ====
+# ===
+
+# Pronóstico ===
 
 x11()
 pronostico_var = predict(V.dr, n.ahead = 12,ci=0.95) 
@@ -372,19 +410,25 @@ graficar_pronostico_var(pronostico_var)
 # Versión Fanchart
 fanchart(predict(V.dr, n.ahead = 12), colors = c("blue","lightblue"))
 
+# Funciones de impulso respuesta no ortogonalizadas ===
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-# Funciones de impulso respuesta #
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+# Nota: Recuede que para poder calcular las IRF de un modelo VAR
+#       este debe tener su representación como VMA(infinito). 
+#       Es decir, pasamos del VAR(1) --> VMA(infinito)
+
+# IRFs no ortogonalizadas: 
+Phi(V.dr, nstep=10) # Esta función nos calcula la matriz de coeficientes de 
+                    # las IRFs no ortogonalizadas "n pasos adelante"
+
+# Graficación de las IRFs
 
 # Definimos el número pasos adelante
-
 pasos_adelante = 0:18
 
-# La función impulso_respuesta() se importa desde funciones_auxiliares_graficacion_VAR.R.
+# La función impulso_respuesta() se importa desde el script
+# "funciones_auxiliares_graficacion_VAR.R"
 
 # IRF de las variables del sistema ante distintos choques exógenos.
-
 y1_y1 = impulso_respuesta(V.dr, "y_1", "y_1", pasos_adelante, ortog = FALSE,
                           int_conf = 0.95, titulo = "Impulso de y1 - respuesta de y1")
 y1_y2 = impulso_respuesta(V.dr, "y_1", "y_2", pasos_adelante, ortog = FALSE,
@@ -405,20 +449,36 @@ y3_y3 = impulso_respuesta(V.dr, "y_3", "y_3", pasos_adelante, ortog = FALSE,
                           int_conf = 0.95, titulo = "Impulso de y3 - respuesta de y3")
 
 x11()
-grid.arrange(y1_y1,y1_y2,y1_y3,
-             y2_y1,y2_y2,y2_y3,
-             y3_y1,y3_y2,y3_y3,ncol=3)
+# Grilla de IRF: columnas = impulsos; filas = respuestas.
+grid.arrange(y1_y1,y2_y1,y3_y1,
+             y1_y2,y2_y2,y3_y2,
+             y1_y3,y2_y3,y3_y3,
+             layout_matrix = matrix(1:9, nrow = 3, byrow = TRUE))
+
+# Funciones de impulso respuesta ortogonalizadas ===
 
 # IRF Ortogonalizadas. 
-#
 # Cuando ortog = TRUE, la función irf() usa la descomposición de Cholesky de la
 # matriz de varianzas y covarianzas de los residuales. En este script el orden
 # de las variables es y_1, y_2, y_3; por tanto, la identificación recursiva
 # interpreta a y_1 como la variable contemporáneamente más exógena, luego y_2 y
-# finalmente y_3. Esta es una restricción de identificación: los errores
-# reducidos pueden estar correlacionados, pero los choques ortogonalizados son
-# los que se interpretan como innovaciones estructurales recursivas.
+# finalmente y_3 (como la más endógena). Esta es una restricción de identificación: 
+# los errores en forma reducida " u_t " pueden estar correlacionados, pero los choques 
+# ortogonalizados son los que se interpretan como innovaciones estructurales recursivas.
 
+# IRFs ortogonalizadas: 
+Psi(V.dr, nstep=10) # Esta función nos calcula la matriz de coeficientes de 
+                    # las IRFs ortogonalizadas "n pasos adelante"  
+
+# Graficación de las IRFs
+
+# Definimos el número pasos adelante
+pasos_adelante = 0:18
+
+# La función impulso_respuesta() se importa desde el script
+# "funciones_auxiliares_graficacion_VAR.R"
+
+# IRFs ortogonalizadas de las variables del sistema ante distintos choques exógenos.
 y1_y1_ortog = impulso_respuesta(V.dr, "y_1", "y_1", pasos_adelante, ortog = TRUE,
                                 int_conf = 0.95, titulo = "Impulso ortogonal de y1 - respuesta de y1")
 y1_y2_ortog = impulso_respuesta(V.dr, "y_1", "y_2", pasos_adelante, ortog = TRUE,
@@ -439,31 +499,19 @@ y3_y3_ortog = impulso_respuesta(V.dr, "y_3", "y_3", pasos_adelante, ortog = TRUE
                                 int_conf = 0.95, titulo = "Impulso ortogonal de y3 - respuesta de y3")
 
 x11()
-grid.arrange(y1_y1_ortog,y1_y2_ortog,y1_y3_ortog,
-             y2_y1_ortog,y2_y2_ortog,y2_y3_ortog,
-             y3_y1_ortog,y3_y2_ortog,y3_y3_ortog,ncol=3)
+# Grilla de OIRF: columnas = impulsos; filas = respuestas.
+grid.arrange(y1_y1_ortog,y2_y1_ortog,y3_y1_ortog,
+             y1_y2_ortog,y2_y2_ortog,y3_y2_ortog,
+             y1_y3_ortog,y2_y3_ortog,y3_y3_ortog,
+             layout_matrix = matrix(1:9, nrow = 3, byrow = TRUE))
 
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-# Descomposición de varianza del error de pronóstico #
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~# 
+# Descomposición de varianza del error de pronóstico ===
 
-# Aquí veremos la proporción de la varianza de error de pronóstico de cada variable
-# explicada por las variables dentro del sistema
+# La descomposición de varianza del error de pronóstico (FEVD) da la proporción de la 
+# varianza de error de pronóstico de cada variable explicada por las variables 
+# dentro del sistema
 
 x11()
 fevd(V.dr, n.ahead = 18)
 plot(fevd(V.dr, n.ahead = 18),col=c("orange3", "firebrick4", "royalblue4"))
- 
-# VAR(1) --> VMA(infinito)
-
-# Representación donde se obtienen las IRF sencillas.
-
-
-Phi(V.dr, nstep=10) # Esta función nos calcula la matriz de coeficientes 
-                   # n pasos adelante
-
-# Coeficientes de las IRF ortogonales
-
-Psi(V.dr, nstep=10)  
-
