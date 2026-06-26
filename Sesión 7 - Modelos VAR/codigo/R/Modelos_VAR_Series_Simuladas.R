@@ -27,8 +27,8 @@
 # Nota: Tips prácticos en R
 ## Para limpiar el entorno de trabajo se puede correr el comando: " rm(list = ls()) "
 ## Para cerrar todas las gráficas actualmente abiertas se puede correr el comando: " dev.off() "
-## Para resetear R se puede usar el comando: 
-
+## Para resetear R se puede usar las teclas: Ctrl + Shift + F10
+ 
 
 # Importación de paquetes ----
 
