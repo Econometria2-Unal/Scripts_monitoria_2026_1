@@ -1,12 +1,12 @@
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-#                           UNIVERSIDAD NACIONAL DE COLOMBIA
-#                            Facultad de Ciencias Económicas 
-#                               Econometría II | Monitoría 
-#
-#                                        Sesión 7   
-#                           Modelos de vectores autorregresivos 
-#                                  
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+"""
+Universidad Nacional de Colombia
+Facultad de Ciencias Económicas
+
+Econometría II | Monitoría
+Sesión 7: Modelos de vectores autorregresivos
+
+Semestre: 2026-1
+"""
 
 #%reset -f Por si queremos limpiar el entorno de trabajo antes de ejecutar el código
 
