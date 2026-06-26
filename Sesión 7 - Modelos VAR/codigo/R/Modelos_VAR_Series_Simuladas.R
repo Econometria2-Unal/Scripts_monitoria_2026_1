@@ -392,7 +392,7 @@ arch.test(V.dr, lags.multi = 12, multivariate.only = TRUE) # No rechazo
 # Normalidad ===
 
 # Jarque-Bera para series multivariadas.  
-normality.test(V.dr) #No rechazo, se cumple el supuesto.
+normality.test(V.dr) # No rechazo, se cumple el supuesto.
 
 # Nota: Se cumple el supuesto de normalidad
 
@@ -402,9 +402,12 @@ normality.test(V.dr) #No rechazo, se cumple el supuesto.
 
 # Pronóstico ===
 
-x11()
+
 pronostico_var = predict(V.dr, n.ahead = 12,ci=0.95) 
 pronostico_var
+
+# Graficas pronóstico
+x11()
 graficar_pronostico_var(pronostico_var) 
 
 # Versión Fanchart
