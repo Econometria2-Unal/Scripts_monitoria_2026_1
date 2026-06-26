@@ -12,6 +12,10 @@
 # ===
 
 #' 1. Simulación de un proceso VAR(1) con 3 variables
+#'  1.1 Especificación de las condiciones de la simulación
+#'  1.2 Simulación de los errores en forma reducida " u_t "
+#'    1.2.1 Construcción de los errores " u_t " usando descomposición de Cholesky
+#'    1.2.2 Propiedades de los errores en forma reducida " u_t "
 #' 2. Metodologia Box-Jenkins para series multivariadas
 #'  2.1. Identificación
 #'  2.2. Estimación
@@ -51,23 +55,35 @@ library(mvtnorm)
 #       en distribución normal multivariada; el paquete "MASS" trabaja más temas
 #       de estadística en general. 
 
+# Importación de funciones auxiliares de graficación del
+# script auxiliar "funciones_auxiliares_graficacion_VAR.R"
+source("codigo/R/funciones_auxiliares_graficacion_VAR.R", encoding = "UTF-8")
+
+# Nota: "source" permite importar de manera manual scripts construidos
+#       por uno mismo. En éste caso, importa todas las funciones auxiliares
+#       de graficación que se encuentran en el script 
+#       "funciones_auxiliares_graficacion_VAR.R"
+
 
 # ===
 # 1. Simulación de un proceso VAR(1) con 3 variables ====
 # ===
 
+# 1.1 Especificación de las condiciones de la simulación ----
+
 # Fijamos la semilla para que siempre dé el mismo resultado
 semilla_simulacion = 82901
 set.seed(semilla_simulacion) 
 
-# Determinamos un tamaño de muestra de 500 observaciones
-T = 5000 # Nota: Entre más muestra, mejor será observar la convergencia
-        #       de los resultados simulados a los teóricos
+# Determinamos un tamaño de muestra de 5000 observaciones
+T = 5000 # Nota: Entre más muestra, mejor se dará la convergencia
+         #       de los resultados simulados a los teóricos
 
+# Nombre de las variables y los errores asociados
 variables = c("y_1", "y_2", "y_3")
 errores = c("u_1", "u_2", "u_3")
 
-# Se va a simular un modelo VAR_1 cuya ecuación está dada por: 
+# Se va a simular un modelo VAR(1) cuya ecuación está dada por: 
 ## Y_t = A_0 + A_1 Y_{t-1} + u_t
 
 # Nota: Y_t es una matriz de 3 variables (una variable por columna). 
@@ -75,29 +91,44 @@ errores = c("u_1", "u_2", "u_3")
 #       matriz es el error asociado a cada variable de la matriz Y_t.
 
 # Y_t Se crea como una matriz de 0s. Luego se llena con valores reales, cuando
-#     ocurre la simulación
+#     ocurra la simulación del VAR(1)
 Y_t <- matrix(0, nrow = T, ncol = length(variables),
-              dimnames = list(NULL, variables)) 
+              dimnames = list(NULL, variables)); head(Y_t)
+
+# Nota: En este punto, Y_t es una matriz de ceros que se llenará con la simulación
+
+# 1.2 Simulación de los errores en forma reducida " u_t " ----
+
+
 
 # En esta simulación se quiere que los errores estén correlacionados y que,
 # además, tengan desviaciones estándar diferentes. Para ello simulamos:
 #
-#   u_t ~ N_3(0, Sigma_u)
+#   u_t ~ N_3(0, Sigma_u) ;  Distribución Normal Trivariada
 #
 # La matriz P_chol es triangular inferior. Esto permite construir una matriz de
 # varianzas y covarianzas:
 #
-#   Sigma_u = P_chol P_chol'
+#   Sigma_u = P_chol P_chol' ; Donde P_chol es la matriz de la descomposicion de Cholesky
 #
 # Esta construcción es coherente con una identificación recursiva tipo Cholesky:
 # y_1 es contemporáneamente más exógena que y_2 y y_3, mientras que y_2 es más
 # exógena que y_3. Los errores reducidos u_t estarán correlacionados, pero los
-# choques estructurales eps_t que los generan son ortogonales.
+# errores estructurales e_t que los generan son ortogonales.
 #
-# Importante: la correlación entre errores no garantiza por sí sola un orden de
+# Nota: La correlación entre errores no garantiza por sí sola un orden de
 # exogeneidad. El orden se impone mediante la estructura triangular de P_chol
 # para la relación contemporánea. La matriz A_1, definida más abajo, gobierna
-# los efectos rezagados y no necesita ser triangular para usar Cholesky.
+# los efectos rezagados y no necesita ser triangular para usar 
+# la Descomposición de Cholesky.
+#
+# Nota: Tenga presente que esta es la parte más importante de toda la simulación 
+
+
+# 1.2.1 Construcción de los errores " u_t " usando descomposición de Cholesky ----
+
+# Nota: 
+
 P_chol = matrix(c(0.70, 0.00, 0.00,
                   0.35, 1.10, 0.00,
                   0.25, 0.55, 1.60),
@@ -113,24 +144,13 @@ cor_u_teorica
 desv_u_teoricas = sqrt(diag(Sigma_u_teorica))
 desv_u_teoricas
 
-# Forma manual equivalente:
-# 1. Simular choques estructurales normales estándar e independientes.
-# 2. Transformarlos con P_chol para obtener errores reducidos normales
-#    multivariados, correlacionados y con diferentes desviaciones estándar.
-set.seed(semilla_simulacion)
-eps_t_manual = matrix(rnorm(T * length(errores)), nrow = T, ncol = length(errores),
-                      dimnames = list(NULL, c("eps_1", "eps_2", "eps_3")))
-u_t_manual = eps_t_manual %*% t(P_chol)
-colnames(u_t_manual) = errores
-
 # Simulación automática desde una normal multivariada.
 # MASS::mvrnorm() y mvtnorm::rmvnorm() son funciones estándar en R para simular:
 #
 #   u_t ~ N_3(0, Sigma_u)
 #
-# En este script distinguimos los errores simulados con cada función para poder
-# compararlos. Para la simulación principal del VAR usamos u_t_mvtnorm, porque
-# permite indicar explícitamente method = "chol".
+# Se dejan ambas alternativas disponibles. Para la simulación principal del VAR
+# usamos u_t_mvtnorm, porque permite indicar explícitamente method = "chol".
 media_u = rep(0, length(errores))
 names(media_u) = errores
 
@@ -146,51 +166,7 @@ colnames(u_t_mvtnorm) = errores
 # Errores usados en la simulación del VAR.
 u_t = u_t_mvtnorm
 
-# Verificación: la simulación manual, MASS::mvrnorm() y mvtnorm::rmvnorm()
-# representan la misma distribución objetivo. No se espera que sean idénticas
-# observación por observación, porque cada método puede usar una raíz matricial
-# distinta de Sigma_u. La equivalencia importante es:
-#
-#   Var(u_t_manual) = P_chol P_chol' = Sigma_u
-#   Var(u_t_mass)    = Sigma_u
-#   Var(u_t_mvtnorm) = Sigma_u
-covarianza_manual_teorica = P_chol %*% t(P_chol)
-misma_covarianza_teorica = all.equal(covarianza_manual_teorica, Sigma_u_teorica)
-misma_covarianza_teorica
-
-son_mismas_observaciones_mass_mvtnorm = all.equal(u_t_mass, u_t_mvtnorm)
-son_mismas_observaciones_mass_mvtnorm
-
-comparacion_simulacion_manual_mass_mvtnorm = list(
-  medias_manual = colMeans(u_t_manual),
-  medias_mass = colMeans(u_t_mass),
-  medias_mvtnorm = colMeans(u_t_mvtnorm),
-  covarianza_manual = cov(u_t_manual),
-  covarianza_mass = cov(u_t_mass),
-  covarianza_mvtnorm = cov(u_t_mvtnorm),
-  covarianza_teorica = Sigma_u_teorica,
-  max_dif_cov_manual_vs_teorica = max(abs(cov(u_t_manual) - Sigma_u_teorica)),
-  max_dif_cov_mass_vs_teorica = max(abs(cov(u_t_mass) - Sigma_u_teorica)),
-  max_dif_cov_mvtnorm_vs_teorica = max(abs(cov(u_t_mvtnorm) - Sigma_u_teorica))
-)
-comparacion_simulacion_manual_mass_mvtnorm
-
-resumen_comparacion_errores = bind_rows(
-  data.frame(metodo = "manual", error = errores,
-             media = colMeans(u_t_manual),
-             desviacion_estandar = apply(u_t_manual, 2, sd)),
-  data.frame(metodo = "MASS::mvrnorm", error = errores,
-             media = colMeans(u_t_mass),
-             desviacion_estandar = apply(u_t_mass, 2, sd)),
-  data.frame(metodo = "mvtnorm::rmvnorm", error = errores,
-             media = colMeans(u_t_mvtnorm),
-             desviacion_estandar = apply(u_t_mvtnorm, 2, sd))
-)
-resumen_comparacion_errores
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-# Análisis descriptivo de u_t   #
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+# 1.2.2 Propiedades de los errores en forma reducida " u_t " ----
 
 resumen_errores = data.frame(
   error = errores,
@@ -208,136 +184,25 @@ Sigma_u_muestral
 cor_u_muestral = cor(u_t)
 cor_u_muestral
 
-# Funciones auxiliares para graficar con ggplot2 sin depender de ggfortify
-geom_linea_actual = function(..., ancho = 0.5){
-  if (packageVersion("ggplot2") >= "3.4.0") {
-    geom_line(..., linewidth = ancho)
-  } else {
-    geom_line(..., size = ancho)
-  }
-}
+# Verificación gráfica de la normalidad de los errores " u_t " simulados
+graficos_errores = graficar_diagnostico_errores(u_t = u_t,
+                                                errores = errores,
+                                                cor_u_muestral = cor_u_muestral)
 
-graficar_ts = function(serie, titulo, color){
-  data.frame(
-    tiempo = as.numeric(time(serie)),
-    valor = as.numeric(serie)
-  ) %>% 
-    ggplot(aes(x = tiempo, y = valor)) +
-    geom_linea_actual(ancho = 1, color = color) +
-    theme_light() +
-    ggtitle(titulo) +
-    xlab("") +
-    ylab("") +
-    theme(plot.title = element_text(size = 11, hjust = 0.5))
-}
-
-graficar_pronostico_var = function(pronostico){
-  datos_pronostico = imap_dfr(pronostico$fcst, function(matriz, variable){
-    as.data.frame(matriz) %>% 
-      mutate(
-        paso = seq_len(n()),
-        variable = variable
-      ) %>% 
-      rename(
-        pronostico = fcst,
-        inferior = lower,
-        superior = upper
-      )
-  })
-  
-  datos_pronostico %>% 
-    ggplot(aes(x = paso, y = pronostico)) +
-    geom_ribbon(aes(ymin = inferior, ymax = superior), 
-                fill = "grey70", alpha = 0.35) +
-    geom_linea_actual(ancho = 0.8, color = "royalblue") +
-    facet_wrap(~ variable, scales = "free_y") +
-    theme_light() +
-    xlab("Pasos adelante") +
-    ylab("") +
-    ggtitle("Pronóstico VAR") +
-    theme(plot.title = element_text(size = 11, hjust = 0.5))
-}
-
-errores_df = as.data.frame(u_t) %>% 
-  mutate(periodo = seq_len(T)) %>% 
-  pivot_longer(cols = all_of(errores), names_to = "error", values_to = "valor")
-
-resumen_errores_graf = errores_df %>% 
-  group_by(error) %>% 
-  summarise(media = mean(valor),
-            desv = sd(valor),
-            minimo = min(valor),
-            maximo = max(valor),
-            .groups = "drop")
-
-densidad_normal_errores = resumen_errores_graf %>% 
-  mutate(valor = map2(minimo, maximo, ~ seq(.x, .y, length.out = 100))) %>% 
-  unnest(valor) %>% 
-  mutate(densidad = dnorm(valor, mean = media, sd = desv))
-
-g_errores_ts = errores_df %>% 
-  ggplot(aes(x = periodo, y = valor, color = error)) +
-  geom_linea_actual(ancho = 0.6) +
-  facet_wrap(~ error, ncol = 1, scales = "free_y") +
-  theme_light() +
-  guides(color = "none") +
-  xlab("") +
-  ylab("") +
-  ggtitle("Errores simulados")
-
-g_hist_errores = errores_df %>% 
-  ggplot(aes(x = valor)) +
-  geom_histogram(aes(y = after_stat(density)), bins = 25,
-                 fill = "lightblue", color = "white") +
-  geom_linea_actual(data = densidad_normal_errores,
-                    aes(x = valor, y = densidad),
-                    ancho = 0.7, color = "firebrick4") +
-  facet_wrap(~ error, scales = "free") +
-  theme_light() +
-  xlab("") +
-  ylab("Densidad") +
-  ggtitle("Distribución empírica vs. normal")
-
-g_qq_errores = errores_df %>% 
-  ggplot(aes(sample = valor)) +
-  stat_qq(color = "royalblue", alpha = 0.7) +
-  stat_qq_line(color = "firebrick4") +
-  facet_wrap(~ error, scales = "free") +
-  theme_light() +
-  xlab("Cuantiles teóricos") +
-  ylab("Cuantiles muestrales") +
-  ggtitle("QQ plots de los errores")
-
-cor_errores_df = as.data.frame(as.table(cor_u_muestral)) %>% 
-  rename(error_1 = Var1, error_2 = Var2, correlacion = Freq)
-
-g_corr_errores = cor_errores_df %>% 
-  ggplot(aes(x = error_1, y = error_2, fill = correlacion)) +
-  geom_tile(color = "white") +
-  geom_text(aes(label = round(correlacion, 2)), size = 4) +
-  scale_fill_gradient2(low = "firebrick4", mid = "white", high = "royalblue",
-                       midpoint = 0, limits = c(-1, 1)) +
-  coord_fixed() +
-  theme_light() +
-  xlab("") +
-  ylab("") +
-  ggtitle("Correlación entre errores")
-
-x11();grid.arrange(g_errores_ts, g_hist_errores, ncol = 2)
-x11();grid.arrange(g_qq_errores, g_corr_errores, ncol = 2)
+x11();grid.arrange(graficos_errores$series,
+                   graficos_errores$histograma, ncol = 2)
+x11();grid.arrange(graficos_errores$qq,
+                   graficos_errores$correlacion, ncol = 2)
 
 # Definimos el vector constante A_0
-A_0 = c(0.5, 0.2, -0.1) 
+A_0 = c(0.5, 0.2, -0.1); A_0 
 
 # Definimos la matriz de coeficientes autorregresivos.
 A_1 = matrix(c(0.35, 0.08, 0.04,
                0.25, 0.30, 0.06,
                0.15, 0.20, 0.25),
              nrow = 3, byrow = TRUE,
-             dimnames = list(variables, paste0("L1.", variables))) # Matriz 3x3
-
-A_0
-A_1
+             dimnames = list(variables, paste0("L1.", variables))); A_1 # Matriz 3x3
 
 # La matriz A_1 no es triangular inferior. Por tanto, la simulación permite
 # efectos rezagados cruzados entre las tres variables. Esto separa claramente
@@ -365,8 +230,7 @@ sim_VAR1 = function(Y_t, A_0, A_1, u_t, T){
 Y_t = sim_VAR1(Y_t, A_0, A_1, u_t, T) # 
                             # de ceros Y_t con valores
 
-# Convertimos la serie en un objeto ts
-
+# Convertimos la serie en un objeto de serie de tiempo "ts"
 Y_t = ts(Y_t, start=c(1900,1), frequency=4)
 
 
@@ -517,43 +381,7 @@ fanchart(predict(V.dr, n.ahead = 12), colors = c("blue","lightblue"))
 
 pasos_adelante = 0:18
 
-# Función que me permite calcular y graficar las funciones impulso respuesta 
-
-# (A cada función impulso respuesta le asigno una gráfica)
-
-impulso_respuesta = function(var, impulso, respuesta, pasos_adelante, ortog, 
-                             int_conf, titulo){
-  
-  "Función diseñada por German Camilo Rodriguez" 
-  
- "Calcula las funciones impulso respuesta ortogonalizadas y no ortogonalizadas 
-  y devuelve una grafíca IRF o OIRF dependiendo la especificación"
-  
-  # Cáclulo de la función impulso respuesta
-  total_pasos_futuros = length(pasos_adelante) - 1
-  IRF = irf(var, impulse=impulso, response=respuesta, n.ahead = total_pasos_futuros, 
-            ortho=ortog, ci = int_conf)
-  IRF_data_frame = data.frame(
-    pasos_adelante = pasos_adelante,
-    irf = as.numeric(IRF$irf[[impulso]][, respuesta]),
-    inferior = as.numeric(IRF$Lower[[impulso]][, respuesta]),
-    superior = as.numeric(IRF$Upper[[impulso]][, respuesta])
-  )
-  # Gráfica de la función impulso respuesta
-  graph = IRF_data_frame %>% 
-    ggplot(aes(x = pasos_adelante, y = irf, ymin = inferior, 
-               ymax = superior)) +
-    geom_hline(yintercept = 0, color="red") +
-    geom_ribbon(fill="grey", alpha=0.2) +
-    geom_linea_actual(ancho = 0.7) +
-    theme_light() +
-    ggtitle(titulo)+
-    ylab("")+
-    xlab("Pasos adelante") +
-    theme(plot.title = element_text(size = 11, hjust=0.5),
-          axis.title.y = element_text(size=11))    
-  return(graph)
-}
+# La función impulso_respuesta() se importa desde funciones_auxiliares_graficacion_VAR.R.
 
 # IRF de las variables del sistema ante distintos choques exógenos.
 
