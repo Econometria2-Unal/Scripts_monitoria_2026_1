@@ -480,10 +480,8 @@ grid.arrange(grobs = irf_ortog$graficas,
 
 # Descomposición de varianza del error de pronóstico ===
 
-# La descomposición de varianza del error de pronóstico (FEVD) da la proporción de la 
-# varianza de error de pronóstico de cada variable explicada por las variables 
-# dentro del sistema
-
+# La FEVD resume que proporcion de la varianza del error de pronostico de cada
+# variable se atribuye a los choques de cada variable del sistema.
 x11()
 fevd(V.dr, n.ahead = 18)
-plot(fevd(V.dr, n.ahead = 18),col=c("orange3", "firebrick4", "royalblue4"))
+plot(fevd(V.dr, n.ahead = 18),c("magenta4", "cyan3", "slateblue3"))

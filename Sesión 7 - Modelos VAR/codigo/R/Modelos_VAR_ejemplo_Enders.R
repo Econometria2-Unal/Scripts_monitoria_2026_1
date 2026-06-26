@@ -312,8 +312,8 @@ plot(P.20, names = "dl.CPI")
 # Homocedasticidad ----
 
 # Test tipo ARCH multivariado
-arch.test(VAR_enders, lags.multi = 24, multivariate.only = TRUE); arch_24 # No rechazo
-arch.test(VAR_enders, lags.multi = 12, multivariate.only = TRUE); arch_12 # No rechazo
+arch.test(VAR_enders, lags.multi = 24, multivariate.only = TRUE) # No rechazo
+arch.test(VAR_enders, lags.multi = 12, multivariate.only = TRUE) # No rechazo
 
 # Nota: Se cumple el supuesto de homocedasticidad
 
@@ -409,17 +409,25 @@ print(g_bootstrap)
 
 # Funciones de impulso-respuesta no ortogonalizadas ----
 
-# Para calcular IRF, el VAR debe admitir una representacion VMA(infinito).
-# En la practica esto se revisa con la estabilidad del VAR estimado.
-Phi(VAR_enders, nstep = 10)
+# Nota: Recuede que para poder calcular las IRF de un modelo VAR
+#       este debe tener su representación como VMA(infinito). 
+#       Es decir, pasamos del VAR(1) --> VMA(infinito)
 
+# IRFs no ortogonalizadas: 
+Phi(VAR_enders, nstep = 10) # Esta función nos calcula la matriz de coeficientes de 
+                            # las IRFs no ortogonalizadas "n pasos adelante"
+
+# Graficación de las IRFs
+
+# Definimos el número pasos adelante
 pasos_adelante = 0:24
 int_conf_irf = 0.95
 semilla_irf = 202601
 repeticiones_bootstrap_irf = 100
 
-# La funcion graficar_grilla_irf() calcula el objeto irf() una sola vez y luego
-# genera automaticamente las 9 graficas: columnas = impulsos; filas = respuestas.
+# La funcion graficar_grilla_irf() calcula el objeto irf() una sola vez
+# y luego crea cada panel con programacion funcional.
+# IRF de las variables del sistema ante distintos choques exogenos.
 irf_no_ortog = graficar_grilla_irf(
   VAR_enders,
   variables,
@@ -432,6 +440,7 @@ irf_no_ortog = graficar_grilla_irf(
 )
 
 x11()
+# Grilla de IRF: columnas = impulsos; filas = respuestas.
 grid.arrange(grobs = irf_no_ortog$graficas,
              layout_matrix = matrix(seq_along(irf_no_ortog$graficas),
                                     nrow = length(variables), byrow = TRUE))
@@ -439,13 +448,20 @@ grid.arrange(grobs = irf_no_ortog$graficas,
 
 # Funciones de impulso-respuesta ortogonalizadas ----
 
-# Cuando ortog = TRUE, irf() usa Cholesky sobre la matriz de covarianzas de los
-# residuales. Con el orden definido arriba, dl.IPI es la variable
+# Cuando ortog = TRUE, irf() usa la descompósición de Cholesky sobre la matriz de
+# covarianzas de los residuales. Con el orden definido arriba, dl.IPI es la variable
 # contemporaneamente mas exogena, luego Unem y finalmente dl.CPI. Este supuesto
 # debe justificarse economicamente antes de interpretar las OIRF como choques
 # estructurales.
-Psi(VAR_enders, nstep = 10)
 
+# IRFs ortogonalizadas: 
+Psi(VAR_enders, nstep = 10) # Esta función nos calcula la matriz de coeficientes de 
+                            # las IRFs ortogonalizadas "n pasos adelante" 
+
+# Graficación de las IRFs
+
+# Usamos los mismos pasos adelante, intervalo de confianza y semilla.
+# IRFs ortogonalizadas de las variables del sistema ante distintos choques exogenos.
 irf_ortog = graficar_grilla_irf(
   VAR_enders,
   variables,
@@ -458,6 +474,7 @@ irf_ortog = graficar_grilla_irf(
 )
 
 x11()
+# Grilla de OIRF: columnas = impulsos; filas = respuestas.
 grid.arrange(grobs = irf_ortog$graficas,
              layout_matrix = matrix(seq_along(irf_ortog$graficas),
                                     nrow = length(variables), byrow = TRUE))

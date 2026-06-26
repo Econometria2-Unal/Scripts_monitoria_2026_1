@@ -451,9 +451,9 @@ def graficar_fevd_var(
 ):
     variables = list(fevd.names)
     colores = colores or {
-        "y_1": "#CD8500",  # orange3
-        "y_2": "#8B1A1A",  # firebrick4
-        "y_3": "#27408B",  # royalblue4
+        "y_1": "#8B008B",  # magenta4
+        "y_2": "#00CDCD",  # cyan3
+        "y_3": "#6959CD",  # slateblue3
     }
 
     n_variables = len(variables)
