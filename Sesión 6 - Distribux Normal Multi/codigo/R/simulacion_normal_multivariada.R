@@ -44,7 +44,7 @@ library(mvtnorm)
 # Permite hacer gráficas 2D y 3D interactivas 
 library(plotly)
 
-# 
+# Permite exportar archivos HTML desde R
 library(htmlwidgets)
 
 # Manejo de rutas relativas ---
