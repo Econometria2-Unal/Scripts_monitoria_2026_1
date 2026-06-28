@@ -578,3 +578,5 @@ exportar_graficas_html(
 # Si se ejecuta el script interactivamente, tambien se muestran las graficas
 # en el visor disponible. Al usar python desde consola, se guardan en HTML sin abrir ventanas.
 mostrar_graficas_interactivo(graficas_html)
+
+# %%
