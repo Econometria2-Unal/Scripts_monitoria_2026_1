@@ -96,6 +96,9 @@ errores = c("u_1", "u_2", "u_3")
 Y_t <- matrix(0, nrow = T, ncol = length(variables),
               dimnames = list(NULL, variables)); head(Y_t)
 
+# Para saber las dimensiones de la matriz Y_t
+dim(Y_t) # La matriz tiene 5000 observaciones y 3 variables
+
 # Nota: En este punto, Y_t es una matriz de ceros que se llenará con la simulación
 
 # 1.2 Simulación de los errores en forma reducida " u_t " ----
@@ -118,7 +121,7 @@ Y_t <- matrix(0, nrow = T, ncol = length(variables),
 # La matriz P_chol es triangular inferior. Esto permite construir una matriz de
 # varianzas y covarianzas:
 #
-#   Sigma_u = P_chol P_chol' ; Donde P_chol es la matriz de la descomposicion de Cholesky
+#   Sigma_u = P_chol * P_chol^{'} ; Donde P_chol es la matriz de la descomposicion de Cholesky
 #
 # Esta construcción es coherente con una identificación recursiva tipo Cholesky:
 # y_1 es contemporáneamente más exógena que y_2 y y_3, mientras que y_2 es más
@@ -141,11 +144,12 @@ Y_t <- matrix(0, nrow = T, ncol = length(variables),
   # 2. Determina la estructura de correlación de la matriz de varianzas y covarianzas
   #    de los errores (i.e. de la matriz Sigma_u_teorica, definida abajo.)
 
+# Construcción manual de la matriz P de la descomposición de Cholesky
 P_chol = matrix(c(0.70, 0.00, 0.00,
                   0.35, 1.10, 0.00,
                   0.25, 0.55, 1.60),
                 nrow = 3, byrow = TRUE,
-                dimnames = list(errores, c("eps_1", "eps_2", "eps_3")))
+                dimnames = list(errores, c("u_1", "u_2", "u_3")))
 
 # Matriz de varianzas-covarianzas teórica de la distribución normal multivariada
 Sigma_u_teorica = P_chol %*% t(P_chol); Sigma_u_teorica
@@ -183,6 +187,7 @@ u_t = u_t_mvtnorm
 
 # 1.2.2 Propiedades de los errores en forma reducida " u_t " ----
 
+# Resumen de algunos de los momentos de los errores (e.g. media y varianza)
 resumen_errores = data.frame(
   error = errores,
   media = colMeans(u_t),
@@ -291,7 +296,7 @@ summary(adf3) # Rechazo H0, la serie es I(0)
 # Ya tenemos las series simuladas en la matriz Y_t, por lo que ya es posible aplicar
 # la metodología Box-Jenkins en las series simuladas que se encuentran en Y_t. 
 
-# Beamos que rezago nos recomienda la función VARselect() 
+# Veamos que rezago nos recomienda la función VARselect() 
 
 # Selección de rezagos para un VAR con tendencia e intercepto.
 VARselect(Y_t, lag.max=6,type = "both", season = NULL)
@@ -304,6 +309,10 @@ VARselect(Y_t, lag.max=6,type = "none", season = NULL)
 
 # Como el proceso generador de datos es un VAR(1), esperamos que los criterios
 # de información favorezcan rezagos bajos, especialmente p = 1.
+
+# Note: Que la inclusión de términos determínisticos como tendencia determinística
+#       o constante, puede influir en la decisión de cuántos rezagos se deberían incluir
+#       en el modelo VAR
 
 # ===
 # 2.2. Estimación ====
@@ -402,7 +411,6 @@ normality.test(V.dr) # No rechazo, se cumple el supuesto.
 
 # Pronóstico ===
 
-
 pronostico_var = predict(V.dr, n.ahead = 12,ci=0.95) 
 pronostico_var
 
@@ -425,14 +433,15 @@ Phi(V.dr, nstep=10) # Esta función nos calcula la matriz de coeficientes de
 
 # Graficación de las IRFs
 
-# Definimos el número pasos adelante
+# Parámetros de las gráficas de las IRFs
 pasos_adelante = 0:18
 int_conf_irf = 0.95
 semilla_irf = 202601
-repeticiones_bootstrap_irf = 100
+repeticiones_bootstrap_irf = 100 # Bootstrappings empleados para construir los IC de las IRFs
 
-# La funcion graficar_grilla_irf() calcula el objeto irf() una sola vez
+# Nota: La funcion graficar_grilla_irf() calcula el objeto irf() una sola vez
 # y luego crea cada panel con programacion funcional.
+
 # IRF de las variables del sistema ante distintos choques exogenos.
 irf_no_ortog = graficar_grilla_irf(V.dr, variables, pasos_adelante,
                                    ortog = FALSE, int_conf = int_conf_irf,
@@ -441,6 +450,7 @@ irf_no_ortog = graficar_grilla_irf(V.dr, variables, pasos_adelante,
                                    runs = repeticiones_bootstrap_irf)
 
 x11()
+
 # Grilla de IRF: columnas = impulsos; filas = respuestas.
 grid.arrange(grobs = irf_no_ortog$graficas,
              layout_matrix = matrix(seq_along(irf_no_ortog$graficas),
@@ -453,9 +463,7 @@ grid.arrange(grobs = irf_no_ortog$graficas,
 # matriz de varianzas y covarianzas de los residuales. En este script el orden
 # de las variables es y_1, y_2, y_3; por tanto, la identificación recursiva
 # interpreta a y_1 como la variable contemporáneamente más exógena, luego y_2 y
-# finalmente y_3 (como la más endógena). Esta es una restricción de identificación: 
-# los errores en forma reducida " u_t " pueden estar correlacionados, pero los choques 
-# ortogonalizados son los que se interpretan como innovaciones estructurales recursivas.
+# finalmente y_3 (como la más endógena). 
 
 # IRFs ortogonalizadas: 
 Psi(V.dr, nstep=10) # Esta función nos calcula la matriz de coeficientes de 
@@ -478,10 +486,14 @@ grid.arrange(grobs = irf_ortog$graficas,
                                     nrow = length(variables), byrow = TRUE))
 
 
-# Descomposición de varianza del error de pronóstico ===
+# Descomposición de varianza del error de pronóstico (FEVD) ===
 
 # La FEVD resume que proporcion de la varianza del error de pronostico de cada
 # variable se atribuye a los choques de cada variable del sistema.
-x11()
+
+# Cálculo de la FEVD
 fevd(V.dr, n.ahead = 18)
-plot(fevd(V.dr, n.ahead = 18),c("magenta4", "cyan3", "slateblue3"))
+
+# Gráfica de la FEVD
+x11()
+plot(fevd(V.dr, n.ahead = 18), col = c("magenta4", "cyan3", "slateblue3"))

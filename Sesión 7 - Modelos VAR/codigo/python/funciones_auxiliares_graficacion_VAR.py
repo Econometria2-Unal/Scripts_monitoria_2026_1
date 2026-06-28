@@ -11,33 +11,449 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from scipy import stats
+from statsmodels.stats.diagnostic import het_arch
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 
 
 sns.set_theme(style="whitegrid", context="notebook")
 
 
+class _ResultadoPronosticoVAR(dict):
+    def __repr__(self):
+        tablas = self.get("tablas", {})
+        return "\n\n".join(
+            f"${variable}\n{tabla}" for variable, tabla in tablas.items()
+        )
+
+    __str__ = __repr__
+
+
 # 1. Funciones auxiliares generales ----
 
 
+def configurar_entorno_graficas(
+    ancho_visualizacion: int = 140,
+    max_columns: int = 20,
+):
+    """Configura la visualizacion general de tablas y graficas.
+
+    Parametros
+    ----------
+    ancho_visualizacion : int, default 140
+        Ancho usado al imprimir tablas en pantalla.
+    max_columns : int, default 20
+        Numero maximo de columnas que se muestran en pantalla.
+
+    Retorna
+    -------
+    None
+        La funcion ajusta la visualizacion y cierra graficas abiertas.
+    """
+    pd.set_option("display.width", ancho_visualizacion)
+    pd.set_option("display.max_columns", max_columns)
+    plt.close("all")
+
+
+def mostrar_graficas():
+    """Muestra las graficas creadas por el script.
+
+    Retorna
+    -------
+    None
+        La funcion muestra las graficas o las cierra si es necesario.
+    """
+    if plt.get_backend().lower() == "agg":
+        plt.close("all")
+    else:
+        plt.show()
+
+
+def imprimir_adf(resultado, nombre_variable):
+    """Imprime los resultados principales de una prueba ADF.
+
+    Parametros
+    ----------
+    resultado : tuple
+        Resultado de la prueba ADF.
+    nombre_variable : str
+        Nombre de la variable analizada.
+
+    Retorna
+    -------
+    None
+        La funcion imprime el resumen de la prueba en pantalla.
+    """
+    print(f"\nADF para {nombre_variable}")
+    print(f"Estadistico ADF: {resultado[0]:.6f}")
+    print(f"p-valor: {resultado[1]:.6f}")
+    print(f"Rezagos usados: {resultado[2]}")
+    print("Valores criticos:")
+    for clave, valor in resultado[4].items():
+        print(f"  {clave}: {valor:.6f}")
+
+
+def imprimir_seleccion_rezagos(resultado, titulo, incluir_rezago_cero=True):
+    """Imprime la tabla de seleccion de rezagos de un VAR.
+
+    Parametros
+    ----------
+    resultado : object
+        Resultado de la seleccion de rezagos.
+    titulo : str
+        Titulo que se imprime antes de la tabla.
+    incluir_rezago_cero : bool, default True
+        Indica si la tabla incluye una fila para cero rezagos.
+
+    Retorna
+    -------
+    None
+        La funcion imprime la tabla y los rezagos seleccionados.
+    """
+    print(f"\n{titulo}")
+    try:
+        print(resultado.summary())
+    except IndexError:
+        # statsmodels 0.14 puede fallar al imprimir summary() cuando trend="n".
+        # El resultado si existe; por eso imprimimos manualmente los criterios.
+        n_filas = len(next(iter(resultado.ics.values())))
+        indice = range(0, n_filas) if incluir_rezago_cero else range(1, n_filas + 1)
+        tabla = pd.DataFrame(resultado.ics, index=indice)
+        columnas = [col for col in ["aic", "bic", "fpe", "hqic"] if col in tabla]
+        print(tabla[columnas])
+        print("Rezagos seleccionados:")
+        print(pd.Series(resultado.selected_orders))
+
+
+def imprimir_matrices_acof(var_resultados, variables):
+    """Imprime las matrices de coeficientes de un VAR estimado.
+
+    Parametros
+    ----------
+    var_resultados : object
+        Resultados del modelo VAR estimado.
+    variables : iterable of str
+        Nombres de las variables del modelo.
+
+    Retorna
+    -------
+    None
+        La funcion imprime una matriz de coeficientes por cada rezago.
+    """
+    for lag, matriz in enumerate(var_resultados.coefs, start=1):
+        matriz_lag = pd.DataFrame(
+            matriz,
+            index=variables,
+            columns=[f"L{lag}.{variable}" for variable in variables],
+        )
+        print(f"\nMatriz A_{lag}")
+        print(matriz_lag)
+
+
+def prueba_arch_por_ecuacion(residuales: pd.DataFrame, lags: int, variables=None):
+    """Aplica pruebas ARCH univariadas a los residuales de un VAR.
+
+    Parametros
+    ----------
+    residuales : pandas.DataFrame
+        Residuales del modelo VAR, con una columna por ecuacion.
+    lags : int
+        Numero de rezagos usados en la prueba.
+    variables : iterable of str, optional
+        Variables que se quieren evaluar. Si no se entrega, se usan todas las
+        columnas de residuales.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Tabla con los estadisticos y p-valores de la prueba por ecuacion.
+    """
+    variables = list(residuales.columns) if variables is None else list(variables)
+    resultados = []
+
+    print(f"\nPruebas ARCH univariadas con {lags} rezagos")
+    for variable in variables:
+        lm_stat, lm_pvalue, f_stat, f_pvalue = het_arch(
+            residuales[variable],
+            nlags=lags,
+        )
+        resultados.append(
+            {
+                "variable": variable,
+                "lm_stat": lm_stat,
+                "lm_pvalue": lm_pvalue,
+                "f_stat": f_stat,
+                "f_pvalue": f_pvalue,
+            }
+        )
+        print(
+            f"{variable}: LM p-value = {lm_pvalue:.6f}; "
+            f"F p-value = {f_pvalue:.6f}"
+        )
+
+    return pd.DataFrame(resultados).set_index("variable")
+
+
+def prueba_normalidad_por_ecuacion(residuales: pd.DataFrame, variables=None):
+    """Aplica pruebas Jarque-Bera a los residuales de un VAR.
+
+    Parametros
+    ----------
+    residuales : pandas.DataFrame
+        Residuales del modelo VAR, con una columna por ecuacion.
+    variables : iterable of str, optional
+        Variables que se quieren evaluar. Si no se entrega, se usan todas las
+        columnas de residuales.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Tabla con el estadistico Jarque-Bera y el p-valor por ecuacion.
+    """
+    variables = list(residuales.columns) if variables is None else list(variables)
+    resultados = []
+
+    print("\nPruebas Jarque-Bera univariadas")
+    for variable in variables:
+        jb = stats.jarque_bera(residuales[variable])
+        resultados.append(
+            {
+                "variable": variable,
+                "jb_stat": jb.statistic,
+                "p_value": jb.pvalue,
+            }
+        )
+        print(f"Jarque-Bera {variable} p-value: {jb.pvalue:.6f}")
+
+    return pd.DataFrame(resultados).set_index("variable")
+
+
+def predecir_var(
+    var_resultados,
+    n_ahead: int = 12,
+    ci: float = 0.95,
+    indice=None,
+    variables=None,
+):
+    """Calcula pronosticos de un VAR con intervalos de confianza.
+
+    Parametros
+    ----------
+    var_resultados : object
+        Resultados del modelo VAR estimado.
+    n_ahead : int, default 12
+        Numero de periodos hacia adelante que se quieren pronosticar.
+    ci : float, default 0.95
+        Nivel de confianza usado para los intervalos.
+    indice : pandas.Index, optional
+        Indice temporal de la serie original.
+    variables : iterable of str, optional
+        Nombres de las variables del modelo.
+
+    Retorna
+    -------
+    dict
+        Tablas de pronostico por variable, pronostico puntual y limites del
+        intervalo de confianza.
+    """
+    if not 0 < ci < 1:
+        raise ValueError("ci debe estar entre 0 y 1.")
+
+    alpha = 1 - ci
+    ultimos_valores = var_resultados.endog[-var_resultados.k_ar :]
+    pronostico_puntual, inferior, superior = var_resultados.forecast_interval(
+        y=ultimos_valores,
+        steps=n_ahead,
+        alpha=alpha,
+    )
+
+    if variables is None:
+        variables = getattr(var_resultados, "names", None)
+    if variables is None:
+        variables = [f"y_{i + 1}" for i in range(pronostico_puntual.shape[1])]
+    variables = list(variables)
+
+    if isinstance(indice, pd.PeriodIndex):
+        fechas_futuras = pd.period_range(
+            start=indice[-1] + 1,
+            periods=n_ahead,
+            freq=indice.freq,
+            name=indice.name,
+        )
+    else:
+        fechas_futuras = pd.RangeIndex(
+            start=1,
+            stop=n_ahead + 1,
+            name="paso",
+        )
+
+    pronostico_df = pd.DataFrame(
+        pronostico_puntual,
+        index=fechas_futuras,
+        columns=variables,
+    )
+    inferior_df = pd.DataFrame(inferior, index=fechas_futuras, columns=variables)
+    superior_df = pd.DataFrame(superior, index=fechas_futuras, columns=variables)
+
+    tablas = {}
+    for variable in variables:
+        tablas[variable] = pd.DataFrame(
+            {
+                "fcst": pronostico_df[variable],
+                "lower": inferior_df[variable],
+                "upper": superior_df[variable],
+                "CI": superior_df[variable] - pronostico_df[variable],
+            }
+        )
+
+    return _ResultadoPronosticoVAR(
+        {
+            "tablas": tablas,
+            "pronostico": pronostico_df,
+            "inferior": inferior_df,
+            "superior": superior_df,
+        }
+    )
+
+
+def pronostico_bootstrap_var(var_resultados, pasos, nboot=1000, semilla=None):
+    """Calcula pronosticos por bootstrap para un modelo VAR.
+
+    Parametros
+    ----------
+    var_resultados : object
+        Resultados del modelo VAR estimado.
+    pasos : int
+        Numero de pasos hacia adelante que se quieren pronosticar.
+    nboot : int, default 1000
+        Numero de repeticiones usadas para construir los pronosticos.
+    semilla : int, optional
+        Semilla para reproducir los resultados.
+
+    Retorna
+    -------
+    dict
+        Pronosticos simulados, pronostico promedio e intervalos de confianza.
+    """
+    rng = np.random.default_rng(semilla)
+    endog = np.asarray(var_resultados.endog)
+    residuales = np.asarray(var_resultados.resid)
+    coefs = np.asarray(var_resultados.coefs)
+    intercepto = np.asarray(var_resultados.intercept)
+    p = var_resultados.k_ar
+    n_variables = endog.shape[1]
+
+    ultimos_valores = endog[-p:, :]
+    trayectorias = np.empty((nboot, pasos, n_variables))
+
+    for b in range(nboot):
+        y_boot = np.vstack([ultimos_valores.copy(), np.zeros((pasos, n_variables))])
+        indices_residuales = rng.integers(0, residuales.shape[0], size=pasos)
+
+        for h in range(p, p + pasos):
+            prediccion = intercepto.copy()
+            for lag in range(p):
+                prediccion = prediccion + coefs[lag] @ y_boot[h - lag - 1, :]
+            y_boot[h, :] = prediccion + residuales[indices_residuales[h - p], :]
+
+        trayectorias[b, :, :] = y_boot[p:, :]
+
+    alpha = 0.05
+    return {
+        "trayectorias": trayectorias,
+        "pronostico": trayectorias.mean(axis=0),
+        "inferior": np.quantile(trayectorias, alpha / 2, axis=0),
+        "superior": np.quantile(trayectorias, 1 - alpha / 2, axis=0),
+    }
+
+
 def _asegurar_dataframe(datos, columnas: Iterable[str] | None = None) -> pd.DataFrame:
+    """Devuelve los datos como un DataFrame de pandas.
+
+    Parametros
+    ----------
+    datos : pandas.DataFrame or array-like
+        Datos que se quieren usar como tabla.
+    columnas : iterable of str, optional
+        Nombres de columnas cuando los datos no son un DataFrame.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Copia de los datos organizada como tabla.
+    """
     if isinstance(datos, pd.DataFrame):
         return datos.copy()
     return pd.DataFrame(datos, columns=columnas)
 
 
 def _nombre_para_titulo(variable: str) -> str:
+    """Prepara el nombre de una variable para usarlo en titulos.
+
+    Parametros
+    ----------
+    variable : str
+        Nombre original de la variable.
+
+    Retorna
+    -------
+    str
+        Nombre de la variable sin guiones bajos.
+    """
     return variable.replace("_", "")
 
 
+def _indice_para_grafica(indice):
+    """Convierte un indice temporal a valores que se puedan graficar.
+
+    Parametros
+    ----------
+    indice : pandas.Index
+        Indice de una serie o tabla.
+
+    Retorna
+    -------
+    pandas.Index or array-like
+        Indice original o version numerica si el indice esta en periodos.
+    """
+    if isinstance(indice, pd.PeriodIndex):
+        if indice.freqstr.startswith("Q"):
+            return indice.year + (indice.quarter - 1) / 4
+        if indice.freqstr.startswith("M"):
+            return indice.year + (indice.month - 1) / 12
+        if indice.freqstr.startswith(("A", "Y")):
+            return indice.year
+        return indice.astype(str)
+
+    return indice
+
+
 def graficar_ts(serie, titulo: str, color: str, ax=None):
+    """Grafica una serie de tiempo.
+
+    Parametros
+    ----------
+    serie : array-like or pandas.Series
+        Serie que se quiere graficar.
+    titulo : str
+        Titulo de la grafica.
+    color : str
+        Color de la linea.
+    ax : matplotlib.axes.Axes, optional
+        Eje donde se dibuja la grafica. Si no se entrega, se crea uno nuevo.
+
+    Retorna
+    -------
+    tuple
+        Figura y eje que contienen la grafica.
+    """
     if ax is None:
         fig, ax = plt.subplots(figsize=(6, 4))
     else:
         fig = ax.figure
 
     serie = pd.Series(serie)
-    sns.lineplot(x=serie.index, y=serie.to_numpy(), ax=ax, color=color, linewidth=1)
+    eje_x = _indice_para_grafica(serie.index)
+    sns.lineplot(x=eje_x, y=serie.to_numpy(), ax=ax, color=color, linewidth=1)
     ax.set_title(titulo, fontsize=11)
     ax.set_xlabel("")
     ax.set_ylabel("")
@@ -49,6 +465,22 @@ def graficar_pronostico_var(
     inferior: pd.DataFrame,
     superior: pd.DataFrame,
 ):
+    """Grafica pronosticos de un VAR con intervalos de confianza.
+
+    Parametros
+    ----------
+    pronostico : pandas.DataFrame
+        Pronosticos puntuales de cada variable.
+    inferior : pandas.DataFrame
+        Limite inferior del intervalo de confianza.
+    superior : pandas.DataFrame
+        Limite superior del intervalo de confianza.
+
+    Retorna
+    -------
+    tuple
+        Figura y ejes con las graficas de pronostico.
+    """
     variables = list(pronostico.columns)
     fig, axes = plt.subplots(1, len(variables), figsize=(5 * len(variables), 4))
     axes = np.atleast_1d(axes)
@@ -78,18 +510,128 @@ def graficar_pronostico_var(
     return fig, axes
 
 
+def graficar_fanchart_var(
+    datos,
+    pronostico_var: dict,
+    variables=None,
+    colores=("blue", "lightblue"),
+    figsize=None,
+):
+    """Grafica un fanchart de pronosticos de un modelo VAR.
+
+    Parametros
+    ----------
+    datos : pandas.DataFrame
+        Series observadas usadas como historia del fanchart.
+    pronostico_var : dict
+        Resultado generado por la funcion predecir_var.
+    variables : iterable of str, optional
+        Variables que se quieren graficar. Si no se entrega, se usan todas las
+        columnas del pronostico.
+    colores : tuple, default ("blue", "lightblue")
+        Color de la linea de pronostico y color del intervalo.
+    figsize : tuple, optional
+        Tamano de la figura.
+
+    Retorna
+    -------
+    tuple
+        Figura y ejes con el fanchart de cada variable.
+    """
+    datos = _asegurar_dataframe(datos)
+    pronostico = pronostico_var["pronostico"]
+    inferior = pronostico_var["inferior"]
+    superior = pronostico_var["superior"]
+    variables = list(pronostico.columns) if variables is None else list(variables)
+
+    if figsize is None:
+        figsize = (12, 2.8 * len(variables))
+
+    color_pronostico, color_intervalo = colores
+    fig, axes = plt.subplots(len(variables), 1, figsize=figsize, sharex=False)
+    axes = np.atleast_1d(axes)
+
+    x_historia = np.arange(len(datos))
+    x_pronostico = np.arange(len(datos), len(datos) + len(pronostico))
+
+    for ax, variable in zip(axes, variables):
+        historia = datos[variable].to_numpy()
+        pronostico_variable = pronostico[variable].to_numpy()
+        inferior_variable = inferior[variable].to_numpy()
+        superior_variable = superior[variable].to_numpy()
+
+        ax.plot(
+            x_historia,
+            historia,
+            color="black",
+            linewidth=0.7,
+        )
+        ax.fill_between(
+            x_pronostico,
+            inferior_variable,
+            superior_variable,
+            color=color_intervalo,
+            alpha=0.75,
+            linewidth=0,
+        )
+        ax.plot(
+            x_pronostico,
+            pronostico_variable,
+            color=color_pronostico,
+            linewidth=1.2,
+        )
+        ax.plot(
+            [x_historia[-1], x_pronostico[0]],
+            [historia[-1], pronostico_variable[0]],
+            color=color_pronostico,
+            linewidth=1.0,
+        )
+
+        ax.set_title(f"Fanchart for variable {variable}", fontsize=12, weight="bold")
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_color("black")
+        ax.tick_params(axis="both", colors="black")
+
+    fig.tight_layout(h_pad=2.2)
+    return fig, axes
+
+
 # 2. Funciones auxiliares para graficar errores simulados ----
 
 
 def graficar_diagnostico_errores(
     u_t,
     errores: Iterable[str],
-    cor_u_muestral=None,
-    bins: int = 25,
+    correlacion_muestral=None,
+    barras: int = 25,
 ):
+    """Grafica diagnosticos para errores simulados.
+
+    Parametros
+    ----------
+    u_t : pandas.DataFrame or array-like
+        Errores simulados del modelo.
+    errores : iterable of str
+        Nombres de los errores.
+    correlacion_muestral : pandas.DataFrame, optional
+        Matriz de correlaciones. Si no se entrega, se calcula con los datos.
+    barras : int, default 25
+        Numero de barras para los histogramas.
+
+    Retorna
+    -------
+    dict
+        Graficas de series, histogramas, QQ plots, correlaciones y datos usados.
+    """
     errores = list(errores)
     errores_df = _asegurar_dataframe(u_t, columnas=errores)
-    cor_u_muestral = errores_df.corr() if cor_u_muestral is None else cor_u_muestral
+    correlacion_muestral = (
+        errores_df.corr() if correlacion_muestral is None else correlacion_muestral
+    )
 
     fig_series, axes_series = plt.subplots(
         len(errores), 1, figsize=(10, 2.4 * len(errores)), sharex=True
@@ -114,7 +656,7 @@ def graficar_diagnostico_errores(
         valores = errores_df[error].dropna().to_numpy()
         sns.histplot(
             valores,
-            bins=bins,
+            bins=barras,
             stat="density",
             ax=ax,
             color="lightblue",
@@ -144,7 +686,7 @@ def graficar_diagnostico_errores(
 
     fig_corr, ax_corr = plt.subplots(figsize=(5, 4))
     sns.heatmap(
-        cor_u_muestral,
+        correlacion_muestral,
         annot=True,
         fmt=".2f",
         cmap="coolwarm",
@@ -170,14 +712,32 @@ def graficar_diagnostico_errores(
     }
 
 
-def graficar_diagnostico_residuales_var(residuales: pd.DataFrame, lags: int = 20):
+def graficar_diagnostico_residuales_var(
+    residuales: pd.DataFrame,
+    lags: int = 20,
+):
+    """Grafica diagnosticos de residuales para cada ecuacion del VAR.
+
+    Parametros
+    ----------
+    residuales : pandas.DataFrame
+        Residuales del modelo VAR, con una columna por variable.
+    lags : int, default 20
+        Numero de rezagos usados en las graficas ACF y PACF.
+
+    Retorna
+    -------
+    dict
+        Diccionario con una figura de diagnostico por variable.
+    """
     figuras = {}
 
     for nombre, serie in residuales.items():
         fig, axes = plt.subplots(2, 2, figsize=(12, 6))
         fig.suptitle(f"Diagnostico de residuales - {nombre}", fontsize=13)
 
-        sns.lineplot(x=serie.index, y=serie.to_numpy(), ax=axes[0, 0], color="steelblue")
+        eje_x = _indice_para_grafica(serie.index)
+        sns.lineplot(x=eje_x, y=serie.to_numpy(), ax=axes[0, 0], color="steelblue")
         axes[0, 0].axhline(0, color="red", linestyle="--", linewidth=0.8)
         axes[0, 0].set_title("Residuales")
         axes[0, 0].set_xlabel("")
@@ -189,7 +749,13 @@ def graficar_diagnostico_residuales_var(residuales: pd.DataFrame, lags: int = 20
         axes[0, 1].set_ylabel("")
 
         plot_acf(serie, ax=axes[1, 0], lags=lags, title="ACF residuales")
-        plot_pacf(serie, ax=axes[1, 1], lags=lags, method="ywm", title="PACF residuales")
+        plot_pacf(
+            serie,
+            ax=axes[1, 1],
+            lags=lags,
+            method="ywm",
+            title="PACF residuales",
+        )
 
         fig.tight_layout()
         figuras[nombre] = fig
@@ -201,7 +767,7 @@ def graficar_diagnostico_residuales_var(residuales: pd.DataFrame, lags: int = 20
 
 
 def extraer_datos_irf(
-    IRF,
+    objeto_irf,
     impulso: str,
     respuesta: str,
     pasos_adelante,
@@ -210,10 +776,36 @@ def extraer_datos_irf(
     inferior,
     superior,
 ) -> pd.DataFrame:
+    """Extrae los datos de una funcion impulso-respuesta especifica.
+
+    Parametros
+    ----------
+    objeto_irf : object
+        Resultado de funciones impulso-respuesta producido por el modelo VAR.
+    impulso : str
+        Variable que recibe el choque.
+    respuesta : str
+        Variable cuya respuesta se quiere analizar.
+    pasos_adelante : array-like
+        Horizontes de respuesta.
+    ortog : bool
+        Indica si se usan respuestas ortogonalizadas.
+    variables : iterable of str
+        Nombres de las variables del VAR.
+    inferior : array-like
+        Limites inferiores de los intervalos.
+    superior : array-like
+        Limites superiores de los intervalos.
+
+    Retorna
+    -------
+    pandas.DataFrame
+        Tabla con horizonte, IRF y limites del intervalo.
+    """
     variables = list(variables)
     impulso_idx = variables.index(impulso)
     respuesta_idx = variables.index(respuesta)
-    valores_irf = IRF.orth_irfs if ortog else IRF.irfs
+    valores_irf = objeto_irf.orth_irfs if ortog else objeto_irf.irfs
 
     return pd.DataFrame(
         {
@@ -226,22 +818,44 @@ def extraer_datos_irf(
 
 
 def calcular_bandas_irf_bootstrap(
-    var,
-    total_pasos_futuros: int,
+    var_resultados,
+    total_pasos: int,
     ortog: bool,
     int_conf: float,
     semilla: int | None = None,
     runs: int = 100,
 ):
+    """Calcula intervalos para funciones impulso-respuesta por bootstrap.
+
+    Parametros
+    ----------
+    var_resultados : object
+        Modelo VAR estimado.
+    total_pasos : int
+        Numero de pasos hacia adelante para las IRF.
+    ortog : bool
+        Indica si se calculan bandas para IRF ortogonalizadas.
+    int_conf : float
+        Nivel de confianza del intervalo.
+    semilla : int, optional
+        Semilla para reproducir los resultados.
+    runs : int, default 100
+        Numero de replicas bootstrap.
+
+    Retorna
+    -------
+    tuple
+        Arreglos con los limites inferior y superior.
+    """
     rng = np.random.default_rng(semilla)
-    endog = np.asarray(var.endog)
-    residuales = np.asarray(var.resid)
-    coefs = np.asarray(var.coefs)
-    intercepto = np.asarray(var.intercept)
-    p = var.k_ar
+    endog = np.asarray(var_resultados.endog)
+    residuales = np.asarray(var_resultados.resid)
+    coefs = np.asarray(var_resultados.coefs)
+    intercepto = np.asarray(var_resultados.intercept)
+    p = var_resultados.k_ar
     n_obs, n_variables = endog.shape
     n_residuales = residuales.shape[0]
-    tendencia = getattr(var, "trend", "c")
+    tendencia = getattr(var_resultados, "trend", "c")
 
     irfs_bootstrap = []
     max_intentos = max(runs * 3, runs + 20)
@@ -262,9 +876,9 @@ def calcular_bandas_irf_bootstrap(
             y_boot[t, :] = pred + resid_boot[t - p, :]
 
         try:
-            var_boot = var.model.__class__(y_boot)
+            var_boot = var_resultados.model.__class__(y_boot)
             ajuste_boot = var_boot.fit(p, trend=tendencia)
-            irf_boot = ajuste_boot.irf(total_pasos_futuros)
+            irf_boot = ajuste_boot.irf(total_pasos)
             valores_boot = irf_boot.orth_irfs if ortog else irf_boot.irfs
             irfs_bootstrap.append(valores_boot)
         except Exception:
@@ -284,21 +898,41 @@ def calcular_bandas_irf_bootstrap(
 
 
 def graficar_datos_irf(
-    IRF_data_frame: pd.DataFrame,
+    datos_irf: pd.DataFrame,
     titulo: str,
     ax=None,
     color_intervalo: str = "#bdbdbd",
     alpha_intervalo: float = 0.28,
 ):
+    """Grafica una funcion impulso-respuesta con su intervalo.
+
+    Parametros
+    ----------
+    datos_irf : pandas.DataFrame
+        Tabla con horizonte, IRF y limites del intervalo.
+    titulo : str
+        Titulo de la grafica.
+    ax : matplotlib.axes.Axes, optional
+        Eje donde se dibuja la grafica. Si no se entrega, se crea uno nuevo.
+    color_intervalo : str, default "#bdbdbd"
+        Color del intervalo de confianza.
+    alpha_intervalo : float, default 0.28
+        Transparencia del intervalo de confianza.
+
+    Retorna
+    -------
+    tuple
+        Figura y eje que contienen la grafica.
+    """
     if ax is None:
         fig, ax = plt.subplots(figsize=(5, 3.5))
     else:
         fig = ax.figure
 
-    x = IRF_data_frame["pasos_adelante"].to_numpy()
-    irf = IRF_data_frame["irf"].to_numpy()
-    inferior = IRF_data_frame["inferior"].to_numpy()
-    superior = IRF_data_frame["superior"].to_numpy()
+    x = datos_irf["pasos_adelante"].to_numpy()
+    irf = datos_irf["irf"].to_numpy()
+    inferior = datos_irf["inferior"].to_numpy()
+    superior = datos_irf["superior"].to_numpy()
 
     ax.set_axisbelow(True)
     ax.grid(True, color="#e0e0e0", linewidth=0.8)
@@ -320,7 +954,7 @@ def graficar_datos_irf(
 
 
 def graficar_irf_extraida(
-    IRF,
+    objeto_irf,
     impulso: str,
     respuesta: str,
     pasos_adelante,
@@ -333,8 +967,49 @@ def graficar_irf_extraida(
     color_intervalo: str = "#bdbdbd",
     alpha_intervalo: float = 0.28,
 ):
+    """Extrae y grafica una funcion impulso-respuesta especifica.
+
+    Parametros
+    ----------
+    objeto_irf : object
+        Resultado de funciones impulso-respuesta producido por el modelo VAR.
+    impulso : str
+        Variable que recibe el choque.
+    respuesta : str
+        Variable cuya respuesta se quiere analizar.
+    pasos_adelante : array-like
+        Horizontes de respuesta.
+    ortog : bool
+        Indica si se usan respuestas ortogonalizadas.
+    variables : iterable of str
+        Nombres de las variables del VAR.
+    inferior : array-like
+        Limites inferiores de los intervalos.
+    superior : array-like
+        Limites superiores de los intervalos.
+    titulo : str
+        Titulo de la grafica.
+    ax : matplotlib.axes.Axes, optional
+        Eje donde se dibuja la grafica.
+    color_intervalo : str, default "#bdbdbd"
+        Color del intervalo de confianza.
+    alpha_intervalo : float, default 0.28
+        Transparencia del intervalo de confianza.
+
+    Retorna
+    -------
+    tuple
+        Figura, eje y tabla de datos usados en la grafica.
+    """
     datos_irf = extraer_datos_irf(
-        IRF, impulso, respuesta, pasos_adelante, ortog, variables, inferior, superior
+        objeto_irf,
+        impulso,
+        respuesta,
+        pasos_adelante,
+        ortog,
+        variables,
+        inferior,
+        superior,
     )
     fig, ax = graficar_datos_irf(
         datos_irf,
@@ -347,7 +1022,7 @@ def graficar_irf_extraida(
 
 
 def graficar_grilla_irf(
-    var,
+    var_resultados,
     variables: Iterable[str],
     pasos_adelante,
     ortog: bool,
@@ -360,23 +1035,57 @@ def graficar_grilla_irf(
     alpha_intervalo: float = 0.28,
     metodo_bandas: str = "bootstrap",
 ):
+    """Grafica una grilla de funciones impulso-respuesta del VAR.
+
+    Parametros
+    ----------
+    var_resultados : object
+        Modelo VAR estimado.
+    variables : iterable of str
+        Nombres de las variables del modelo.
+    pasos_adelante : array-like
+        Horizontes de respuesta.
+    ortog : bool
+        Indica si se grafican IRF ortogonalizadas.
+    int_conf : float
+        Nivel de confianza de los intervalos.
+    prefijo_titulo : str
+        Texto inicial usado en los titulos de las graficas.
+    semilla : int, optional
+        Semilla para reproducir los intervalos.
+    runs : int, default 100
+        Numero de replicas usadas para calcular intervalos.
+    figsize : tuple, optional
+        Tamano de la figura completa.
+    color_intervalo : str, default "#bdbdbd"
+        Color de los intervalos de confianza.
+    alpha_intervalo : float, default 0.28
+        Transparencia de los intervalos de confianza.
+    metodo_bandas : {"bootstrap", "montecarlo"}, default "bootstrap"
+        Metodo usado para calcular las bandas de confianza.
+
+    Retorna
+    -------
+    dict
+        Objeto IRF, datos, figuras, ejes y bandas de confianza.
+    """
     variables = list(variables)
     pasos_adelante = np.asarray(pasos_adelante)
     total_pasos_futuros = len(pasos_adelante) - 1
     signif = 1 - int_conf
 
-    IRF = var.irf(total_pasos_futuros)
+    objeto_irf = var_resultados.irf(total_pasos_futuros)
     if metodo_bandas == "bootstrap":
         inferior, superior = calcular_bandas_irf_bootstrap(
-            var,
-            total_pasos_futuros=total_pasos_futuros,
+            var_resultados,
+            total_pasos=total_pasos_futuros,
             ortog=ortog,
             int_conf=int_conf,
             semilla=semilla,
             runs=runs,
         )
     elif metodo_bandas == "montecarlo":
-        inferior, superior = IRF.errband_mc(
+        inferior, superior = objeto_irf.errband_mc(
             orth=ortog,
             repl=runs,
             signif=signif,
@@ -404,7 +1113,7 @@ def graficar_grilla_irf(
             )
             ax = axes[fila, columna]
             _, _, datos_irf = graficar_irf_extraida(
-                IRF,
+                objeto_irf,
                 impulso,
                 respuesta,
                 pasos_adelante,
@@ -430,7 +1139,7 @@ def graficar_grilla_irf(
     fig.tight_layout()
 
     return {
-        "objeto_irf": IRF,
+        "objeto_irf": objeto_irf,
         "combinaciones": pd.DataFrame(combinaciones),
         "datos": pd.concat(datos, ignore_index=True),
         "graficas": graficas,
@@ -449,6 +1158,22 @@ def graficar_fevd_var(
     colores: dict[str, str] | None = None,
     figsize=(12, 12),
 ):
+    """Grafica la descomposicion de varianza del error de pronostico.
+
+    Parametros
+    ----------
+    fevd : object
+        Resultado FEVD producido por un modelo VAR estimado.
+    colores : dict, optional
+        Colores asociados a cada variable.
+    figsize : tuple, default (12, 12)
+        Tamano de la figura.
+
+    Retorna
+    -------
+    tuple
+        Figura y ejes con las graficas FEVD.
+    """
     variables = list(fevd.names)
     colores = colores or {
         "y_1": "#8B008B",  # magenta4

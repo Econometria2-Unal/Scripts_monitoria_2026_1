@@ -486,9 +486,10 @@ grid.arrange(grobs = irf_ortog$graficas,
 
 # La FEVD resume que proporcion de la varianza del error de pronostico de cada
 # variable se atribuye a los choques de cada variable del sistema.
-horizonte_fevd = 24
-fevd_enders = vars::fevd(VAR_enders, n.ahead = horizonte_fevd)
-fevd_enders
 
+# Cálculo de la FEVD
+fevd(VAR_enders, n.ahead = 24)
+
+# Gráfica de la FEVD
 x11()
-plot(fevd_enders, col = c("magenta4", "cyan3", "slateblue3"))
+plot(fevd(VAR_enders, n.ahead = 24), col = c("magenta4", "cyan3", "slateblue3"))

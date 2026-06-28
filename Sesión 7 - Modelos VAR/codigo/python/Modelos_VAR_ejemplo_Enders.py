@@ -1,4 +1,3 @@
-# %%
 """
 Universidad Nacional de Colombia
 Facultad de Ciencias Economicas
@@ -35,141 +34,60 @@ Semestre: 2026-1
 # 1. Importacion de paquetes, rutas y funciones auxiliares ====
 # ===
 
+# Trabajar con rutas relativas en python 
 from pathlib import Path
-import sys
 
+# Módulos de numpy, pandas, matplotlib y scipy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.stats import jarque_bera
-from statsmodels.stats.diagnostic import het_arch
+
+# Módulos de statsmodels
 from statsmodels.tsa.api import VAR
 from statsmodels.tsa.stattools import adfuller
 
-
-# Cargar bases de datos en Python usando rutas relativas ----
-
-try:
-    ruta_script = Path(__file__).resolve().parent
-except NameError:
-    ruta_script = Path.cwd()
-    if not (ruta_script / "funciones_auxiliares_graficacion_VAR.py").exists():
-        ruta_script = Path.cwd() / "codigo" / "python"
-
-directorio_codigo_python = ruta_script
-directorio_sesion_var = directorio_codigo_python.parent.parent
-directorio_datos = directorio_sesion_var / "datos"
-
-# Ruta donde se encuentra base de datos del Enders (con las variables de interes)
-ruta_enders = directorio_datos / "ENDERS.xlsx"
-
-
-# Importacion de funciones auxiliares de graficacion
-
-# Ruta con las funciones auxiliares de graficacion
-ruta_funciones_auxiliares_var = (
-    directorio_codigo_python / "funciones_auxiliares_graficacion_VAR.py"
-)
-
-if str(directorio_codigo_python) not in sys.path:
-    sys.path.append(str(directorio_codigo_python))
-
-from funciones_auxiliares_graficacion_VAR import (  # noqa: E402
+# Importar las funciones auxiliares del script auxiliar "funciones_auxiliares_graficacion_VAR"
+from funciones_auxiliares_graficacion_VAR import (
+    configurar_entorno_graficas,
     graficar_diagnostico_residuales_var,
+    graficar_fanchart_var,
     graficar_fevd_var,
     graficar_grilla_irf,
     graficar_pronostico_var,
     graficar_ts,
+    imprimir_adf,
+    imprimir_matrices_acof,
+    imprimir_seleccion_rezagos,
+    mostrar_graficas,
+    predecir_var,
+    pronostico_bootstrap_var,
+    prueba_arch_por_ecuacion,
+    prueba_normalidad_por_ecuacion,
 )
 
+'''
+Nota: Parar mirar la documentación de cada una de las funciones, puede usar el comando help(<funcion>)
+      desde la terminal interactiva de ipython. E.g. para ver la documentación de la función 
+      "graficar_grilla_irf", use el comando help(graficar_grilla_irf)
+'''
 
-pd.set_option("display.width", 140)
-pd.set_option("display.max_columns", 30)
-plt.close("all")
+# Para configurar las características de las gráficas
+configurar_entorno_graficas(max_columns=30)
 
+# %% Cargar bases de datos en python usando rutas relativas =========================
 
-def mostrar_graficas():
-    if plt.get_backend().lower() == "agg":
-        plt.close("all")
-    else:
-        plt.show()
+# Directorio raiz de la sesion
+BASE_DIR = Path(__file__).resolve().parents[2]
 
+# Directorio con los datos
+DATA_DIR = BASE_DIR / "datos"
 
-def imprimir_adf(resultado, nombre_variable):
-    print(f"\nADF para {nombre_variable}")
-    print(f"Estadistico ADF: {resultado[0]:.6f}")
-    print(f"p-valor: {resultado[1]:.6f}")
-    print(f"Rezagos usados: {resultado[2]}")
-    print("Valores criticos:")
-    for clave, valor in resultado[4].items():
-        print(f"  {clave}: {valor:.6f}")
+# Ruta donde se encuentra base de datos del Enders (con las variables de interes)
+ruta_enders = DATA_DIR / "ENDERS.xlsx"
 
-
-def imprimir_seleccion_rezagos(resultado, titulo, incluye_lag_cero=True):
-    print(f"\n{titulo}")
-    try:
-        print(resultado.summary())
-    except IndexError:
-        # statsmodels 0.14 puede fallar al imprimir summary() cuando trend="n".
-        # El resultado si existe; por eso imprimimos manualmente los criterios.
-        n_filas = len(next(iter(resultado.ics.values())))
-        indice = range(0, n_filas) if incluye_lag_cero else range(1, n_filas + 1)
-        tabla = pd.DataFrame(resultado.ics, index=indice)
-        columnas = [col for col in ["aic", "bic", "fpe", "hqic"] if col in tabla]
-        print(tabla[columnas])
-        print("Rezagos seleccionados:")
-        print(pd.Series(resultado.selected_orders))
-
-
-def imprimir_matrices_acof(var_resultados, variables):
-    for lag, matriz in enumerate(var_resultados.coefs, start=1):
-        matriz_lag = pd.DataFrame(
-            matriz,
-            index=variables,
-            columns=[f"L{lag}.{variable}" for variable in variables],
-        )
-        print(f"\nMatriz A_{lag}")
-        print(matriz_lag)
-
-
-def pronostico_bootstrap_var(var_resultados, pasos, nboot=1000, semilla=None):
-    """Pronostico bootstrap residual condicional a los ultimos p valores."""
-    rng = np.random.default_rng(semilla)
-    endog = np.asarray(var_resultados.endog)
-    residuales = np.asarray(var_resultados.resid)
-    coefs = np.asarray(var_resultados.coefs)
-    intercepto = np.asarray(var_resultados.intercept)
-    p = var_resultados.k_ar
-    n_variables = endog.shape[1]
-
-    ultimos_valores = endog[-p:, :]
-    trayectorias = np.empty((nboot, pasos, n_variables))
-
-    for b in range(nboot):
-        y_boot = np.vstack([ultimos_valores.copy(), np.zeros((pasos, n_variables))])
-        indices_residuales = rng.integers(0, residuales.shape[0], size=pasos)
-
-        for h in range(p, p + pasos):
-            prediccion = intercepto.copy()
-            for lag in range(p):
-                prediccion = prediccion + coefs[lag] @ y_boot[h - lag - 1, :]
-            y_boot[h, :] = prediccion + residuales[indices_residuales[h - p], :]
-
-        trayectorias[b, :, :] = y_boot[p:, :]
-
-    alpha = 0.05
-    return {
-        "trayectorias": trayectorias,
-        "pronostico": trayectorias.mean(axis=0),
-        "inferior": np.quantile(trayectorias, alpha / 2, axis=0),
-        "superior": np.quantile(trayectorias, 1 - alpha / 2, axis=0),
-    }
-
-
-# %%
-# ===
-# 2. Carga y preparacion de los datos ====
-# ===
+# %% =========================
+# 2. Carga y preparacion de los datos 
+# ============================
 
 # La base de datos de Enders contiene series trimestrales de Estados Unidos
 # para 1960T1-2012T4:
@@ -181,7 +99,12 @@ Base.info()
 print(Base.head())
 
 # Series en niveles.
-tiempo_niveles = pd.Index(1960 + np.arange(len(Base)) / 4, name="tiempo")
+tiempo_niveles = pd.period_range(
+    start="1960Q1",
+    periods=len(Base),
+    freq="Q",
+    name="tiempo",
+)
 IPI = pd.Series(Base["IPI"].to_numpy(), index=tiempo_niveles, name="IPI")
 CPI = pd.Series(Base["CPI"].to_numpy(), index=tiempo_niveles, name="CPI")
 UNEM = pd.Series(Base["Unem"].to_numpy(), index=tiempo_niveles, name="Unem")
@@ -329,7 +252,7 @@ seleccion_rezagos_none = modelo_enders.select_order(maxlags=6, trend="n")
 imprimir_seleccion_rezagos(
     seleccion_rezagos_none,
     "Seleccion de rezagos para un VAR sin terminos deterministicos",
-    incluye_lag_cero=False,
+    incluir_rezago_cero=False,
 )
 
 # En el ejemplo de Enders se trabaja con p = 3. A la hora de seleccionar el
@@ -429,40 +352,30 @@ mostrar_graficas()
 #       distintos horizontes de rezagos.
 
 
-# %%
 # Homocedasticidad ----
 
 # statsmodels no tiene un equivalente directo a arch.test() multivariado de
-# vars. Como aproximacion docente, aplicamos pruebas ARCH univariadas por
-# ecuacion con 24 y 12 rezagos.
-for lags in [24, 12]:
-    print(f"\nPruebas ARCH univariadas con {lags} rezagos")
-    for variable in variables:
-        lm_stat, lm_pvalue, f_stat, f_pvalue = het_arch(
-            residuales_enders[variable],
-            nlags=lags,
-        )
-        print(
-            f"{variable}: LM p-value = {lm_pvalue:.6f}; "
-            f"F p-value = {f_pvalue:.6f}"
-        )
+# vars. Por tanto, se construye una función que permite hacer un arch.test()
+# univariado para cada uno de los residuales de la regresión, uno por cada
+# variable del VAR.
+arch_24 = prueba_arch_por_ecuacion(residuales_enders, lags=24, variables=variables)
+arch_12 = prueba_arch_por_ecuacion(residuales_enders, lags=12, variables=variables)
 
 # Nota: La decision se toma revisando los p-valores de las pruebas ARCH por
 #       ecuacion. Este es un diagnostico univariado aproximado al bloque
 #       multivariado usado por vars::arch.test() en R.
 
 
-# %%
 # Normalidad ----
 
 # H0 del Jarque-Bera multivariado: los residuales tienen distribucion normal.
 normalidad_enders = VAR_enders.test_normality()
 print(normalidad_enders.summary())
 
-# Tambien miramos Jarque-Bera univariado para cada ecuacion.
-for variable in variables:
-    jb = jarque_bera(residuales_enders[variable])
-    print(f"Jarque-Bera {variable} p-value: {jb.pvalue:.6f}")
+normalidad_univariada = prueba_normalidad_por_ecuacion(
+    residuales_enders,
+    variables=variables,
+)
 
 # Nota: Se cumple el supuesto de normalidad si no se rechaza H0.
 
@@ -477,65 +390,33 @@ for variable in variables:
 # Especificaciones del pronostico
 horizonte_pronostico = 12
 int_conf_pronostico = 0.95
-alpha_pronostico = 1 - int_conf_pronostico
 
-# Pronostico modelo VAR
-ultimos_valores = VAR_enders.endog[-VAR_enders.k_ar :]
-pronostico_puntual, inferior, superior = VAR_enders.forecast_interval(
-    y=ultimos_valores,
-    steps=horizonte_pronostico,
-    alpha=alpha_pronostico,
+# Función diseñada para parecerse lo más que se pueda a predict(V.dr, n.ahead = 12, ci = 0.95).
+pronostico_var = predecir_var(
+    VAR_enders,
+    n_ahead=horizonte_pronostico,
+    ci=int_conf_pronostico,
+    indice=Y.index,
 )
-
-# Como Y termina en 2012T4, el primer pronostico corresponde a 2013T1.
-fechas_futuras = pd.Index(
-    Y.index[-1] + np.arange(1, horizonte_pronostico + 1) / 4,
-    name="tiempo",
-)
-
-pronostico_var = pd.DataFrame(
-    pronostico_puntual,
-    index=fechas_futuras,
-    columns=variables,
-)
-inferior_var = pd.DataFrame(inferior, index=fechas_futuras, columns=variables)
-superior_var = pd.DataFrame(superior, index=fechas_futuras, columns=variables)
 print(pronostico_var)
 
-for variable in variables:
-    print(f"\nVariable: {variable}")
-    print(
-        pd.DataFrame(
-            {
-                "pronostico": pronostico_var[variable],
-                "inferior": inferior_var[variable],
-                "superior": superior_var[variable],
-            }
-        )
-    )
-
-# Graficar pronostico
+# Graficas pronostico
 fig_pronostico, axes_pronostico = graficar_pronostico_var(
-    pronostico_var,
-    inferior_var,
-    superior_var,
+    pronostico_var["pronostico"],
+    pronostico_var["inferior"],
+    pronostico_var["superior"],
 )
 fig_pronostico.suptitle("Pronostico VAR - ejemplo de Enders", fontsize=11)
 fig_pronostico.tight_layout()
+
 mostrar_graficas()
 
-# Version equivalente a un fanchart basico usando statsmodels.
-VAR_enders.plot_forecast(horizonte_pronostico)
-fig_fanchart = plt.gcf()
-fig_fanchart.set_size_inches(15, 10)
-for ax in fig_fanchart.axes:
-    ax.legend(loc="upper left")
-fig_fanchart.tight_layout()
+# Version fanchart, similar a fanchart(predict(...)) en R.
+fig_fanchart, axes_fanchart = graficar_fanchart_var(Y, pronostico_var)
 mostrar_graficas()
 
 
-# %%
-# Pronostico por bootstrapping ----
+# %% Pronostico por bootstrapping ----
 
 # Pronostico usando bootstrap residual condicional. Esta seccion reproduce la
 # idea de VAR.etp::VAR.BPR en R: remuestrear residuales del VAR estimado y
@@ -552,6 +433,9 @@ For_Boot = pronostico_bootstrap_var(
     nboot=repeticiones_bootstrap_pronostico,
     semilla=semilla_bootstrap_pronostico,
 )
+
+# Fechas futuras para el pronóstico por bootstrap
+fechas_futuras = pronostico_var["pronostico"].index
 
 # Pronosticos de bootstrap
 boots = pd.DataFrame(
@@ -570,10 +454,11 @@ colores_series = {
 
 fig_bootstrap, axes_bootstrap = plt.subplots(1, len(variables), figsize=(15, 4))
 axes_bootstrap = np.atleast_1d(axes_bootstrap)
+eje_tiempo_bootstrap = boots.index.year + (boots.index.quarter - 1) / 4
 
 for ax, variable in zip(axes_bootstrap, variables):
     ax.plot(
-        boots.index,
+        eje_tiempo_bootstrap,
         boots[variable].to_numpy(),
         color=colores_series[variable],
         linewidth=0.8,

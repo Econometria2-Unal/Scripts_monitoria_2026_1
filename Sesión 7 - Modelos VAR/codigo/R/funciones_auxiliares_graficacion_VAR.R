@@ -2,6 +2,12 @@
 
 # 1. Funciones auxiliares generales ----
 
+#' Crea una capa de linea para graficas de ggplot2.
+#'
+#' @param ... Argumentos adicionales que se entregan a `geom_line`.
+#' @param ancho Grosor de la linea.
+#'
+#' @return Una capa de ggplot2 para agregar lineas a una grafica.
 geom_linea_actual = function(..., ancho = 0.5){
   if (packageVersion("ggplot2") >= "3.4.0") {
     geom_line(..., linewidth = ancho)
@@ -10,6 +16,13 @@ geom_linea_actual = function(..., ancho = 0.5){
   }
 }
 
+#' Grafica una serie de tiempo.
+#'
+#' @param serie Serie que se quiere graficar.
+#' @param titulo Titulo de la grafica.
+#' @param color Color de la linea.
+#'
+#' @return Una grafica de ggplot2 con la serie de tiempo.
 graficar_ts = function(serie, titulo, color){
   data.frame(
     tiempo = as.numeric(time(serie)),
@@ -24,6 +37,11 @@ graficar_ts = function(serie, titulo, color){
     theme(plot.title = element_text(size = 11, hjust = 0.5))
 }
 
+#' Grafica pronosticos de un modelo VAR.
+#'
+#' @param pronostico Resultado de `predict` aplicado a un modelo VAR.
+#'
+#' @return Una grafica de ggplot2 con pronosticos e intervalos de confianza.
 graficar_pronostico_var = function(pronostico){
   datos_pronostico = imap_dfr(pronostico$fcst, function(matriz, variable){
     as.data.frame(matriz) %>% 
@@ -54,6 +72,15 @@ graficar_pronostico_var = function(pronostico){
 
 # 2. Funciones auxiliares para graficar errores simulados ----
 
+#' Grafica diagnosticos de los errores simulados.
+#'
+#' @param u_t Matriz o tabla con los errores simulados.
+#' @param errores Nombres de las columnas que contienen los errores.
+#' @param cor_u_muestral Matriz de correlaciones de los errores.
+#' @param bins Numero de barras usadas en los histogramas.
+#'
+#' @return Una lista con graficas de series, histogramas, QQ plots,
+#' correlaciones y los datos usados.
 graficar_diagnostico_errores = function(u_t, errores, cor_u_muestral = cor(u_t),
                                         bins = 25){
   errores_df = as.data.frame(u_t) %>% 
@@ -133,6 +160,14 @@ graficar_diagnostico_errores = function(u_t, errores, cor_u_muestral = cor(u_t),
 
 # 3. Funciones auxiliares para impulso-respuesta ----
 
+#' Extrae datos de una funcion impulso-respuesta.
+#'
+#' @param IRF Resultado de `irf` aplicado a un modelo VAR.
+#' @param impulso Variable que recibe el choque.
+#' @param respuesta Variable cuya respuesta se quiere analizar.
+#' @param pasos_adelante Horizontes de respuesta.
+#'
+#' @return Un `data.frame` con horizonte, IRF y limites del intervalo.
 extraer_datos_irf = function(IRF, impulso, respuesta, pasos_adelante){
   data.frame(
     pasos_adelante = pasos_adelante,
@@ -142,6 +177,12 @@ extraer_datos_irf = function(IRF, impulso, respuesta, pasos_adelante){
   )
 }
 
+#' Grafica una funcion impulso-respuesta.
+#'
+#' @param IRF_data_frame Tabla con horizonte, IRF y limites del intervalo.
+#' @param titulo Titulo de la grafica.
+#'
+#' @return Una grafica de ggplot2 con la funcion impulso-respuesta.
 graficar_datos_irf = function(IRF_data_frame, titulo){
   IRF_data_frame %>% 
     ggplot(aes(x = pasos_adelante, y = irf, ymin = inferior, 
@@ -157,19 +198,36 @@ graficar_datos_irf = function(IRF_data_frame, titulo){
           axis.title.y = element_text(size = 11))    
 }
 
+#' Extrae y grafica una funcion impulso-respuesta.
+#'
+#' @param IRF Resultado de `irf` aplicado a un modelo VAR.
+#' @param impulso Variable que recibe el choque.
+#' @param respuesta Variable cuya respuesta se quiere analizar.
+#' @param pasos_adelante Horizontes de respuesta.
+#' @param titulo Titulo de la grafica.
+#'
+#' @return Una grafica de ggplot2 con la funcion impulso-respuesta.
 graficar_irf_extraida = function(IRF, impulso, respuesta, pasos_adelante, titulo){
   extraer_datos_irf(IRF, impulso, respuesta, pasos_adelante) %>% 
     graficar_datos_irf(titulo)
 }
 
+#' Calcula y grafica una funcion impulso-respuesta.
+#'
+#' @param var Modelo VAR estimado.
+#' @param impulso Variable que recibe el choque.
+#' @param respuesta Variable cuya respuesta se quiere analizar.
+#' @param pasos_adelante Horizontes de respuesta.
+#' @param ortog Indica si se usan respuestas ortogonalizadas.
+#' @param int_conf Nivel de confianza del intervalo.
+#' @param titulo Titulo de la grafica.
+#' @param semilla Semilla para reproducir los resultados.
+#' @param runs Numero de repeticiones usadas para calcular los intervalos.
+#'
+#' @return Una grafica de ggplot2 con la funcion impulso-respuesta.
 impulso_respuesta = function(var, impulso, respuesta, pasos_adelante, ortog, 
                              int_conf, titulo, semilla = NULL, runs = 100){
-  
-  "Funcion disenada por German Camilo Rodriguez"
-  
-  "Calcula las funciones impulso respuesta ortogonalizadas y no ortogonalizadas 
-  y devuelve una grafica IRF o OIRF dependiendo la especificacion"
-  
+
   total_pasos_futuros = length(pasos_adelante) - 1
   IRF = irf(var, impulse = impulso, response = respuesta,
             n.ahead = total_pasos_futuros, ortho = ortog, ci = int_conf,
@@ -180,6 +238,18 @@ impulso_respuesta = function(var, impulso, respuesta, pasos_adelante, ortog,
   return(graph)
 }
 
+#' Grafica una grilla de funciones impulso-respuesta.
+#'
+#' @param var Modelo VAR estimado.
+#' @param variables Nombres de las variables del modelo.
+#' @param pasos_adelante Horizontes de respuesta.
+#' @param ortog Indica si se grafican respuestas ortogonalizadas.
+#' @param int_conf Nivel de confianza de los intervalos.
+#' @param prefijo_titulo Texto inicial usado en los titulos de las graficas.
+#' @param semilla Semilla para reproducir los resultados.
+#' @param runs Numero de repeticiones usadas para calcular los intervalos.
+#'
+#' @return Una lista con el objeto IRF, las combinaciones y las graficas.
 graficar_grilla_irf = function(var, variables, pasos_adelante, ortog, int_conf,
                                prefijo_titulo, semilla = NULL, runs = 100){
   
