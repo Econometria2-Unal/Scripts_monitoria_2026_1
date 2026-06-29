@@ -452,6 +452,7 @@ repeticiones_bootstrap_irf = 100 # Bootstrappings empleados para construir los I
 
 # La funcion graficar_grilla_irf() calcula el objeto irf() una sola vez
 # y luego crea cada panel con programacion funcional.
+
 # IRF de las variables del sistema ante distintos choques exogenos.
 irf_no_ortog = graficar_grilla_irf(
   VAR_enders,
