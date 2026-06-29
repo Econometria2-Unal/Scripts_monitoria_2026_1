@@ -682,6 +682,7 @@ irf_ortog = graficar_grilla_irf(
     runs=repeticiones_montecarlo_irf,
 )
 
+# Grilla de OIRF: columnas = impulsos; filas = respuestas.
 mostrar_graficas()
 
 

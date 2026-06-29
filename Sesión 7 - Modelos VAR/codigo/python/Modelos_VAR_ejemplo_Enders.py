@@ -52,6 +52,7 @@ from funciones_auxiliares_graficacion_VAR import (
     graficar_fanchart_var,
     graficar_fevd_var,
     graficar_grilla_irf,
+    graficar_pronostico_bootstrap_var,
     graficar_pronostico_var,
     graficar_ts,
     imprimir_adf,
@@ -505,10 +506,11 @@ For_Boot = pronostico_bootstrap_var(
     semilla=semilla_bootstrap_pronostico,
 )
 
-# Fechas futuras para el pronóstico por bootstrap
+# Índice de fechas futuras para el pronóstico usando bootstrap
 fechas_futuras = pronostico_var["pronostico"].index
 
-# Pronosticos de bootstrap
+# Pronosticos de bootstrap 
+# Nota: Recuerde que las series de tiempo en python deben ser dataframes de pandas! 
 boots = pd.DataFrame(
     For_Boot["pronostico"],
     index=fechas_futuras,
@@ -523,24 +525,11 @@ colores_series = {
     "dl.CPI": "sienna",
 }
 
-fig_bootstrap, axes_bootstrap = plt.subplots(1, len(variables), figsize=(15, 4))
-axes_bootstrap = np.atleast_1d(axes_bootstrap)
-eje_tiempo_bootstrap = boots.index.year + (boots.index.quarter - 1) / 4
-
-for ax, variable in zip(axes_bootstrap, variables):
-    ax.plot(
-        eje_tiempo_bootstrap,
-        boots[variable].to_numpy(),
-        color=colores_series[variable],
-        linewidth=0.8,
-    )
-    ax.set_title(variable, fontsize=11)
-    ax.set_xlabel("")
-    ax.set_ylabel("")
-    ax.grid(True, color="#e0e0e0", linewidth=0.8)
-
-fig_bootstrap.suptitle("Pronostico puntual con bootstrapping", fontsize=11)
-fig_bootstrap.tight_layout()
+fig_bootstrap, axes_bootstrap = graficar_pronostico_bootstrap_var(
+    boots,
+    variables=variables,
+    colores=colores_series,
+)
 mostrar_graficas()
 
 
@@ -551,19 +540,20 @@ mostrar_graficas()
 #       Es decir, pasamos del VAR(1) --> VMA(infinito).
 
 # IRFs no ortogonalizadas:
-print(VAR_enders.irf(10).irfs)
+print(VAR_enders.irf(10).irfs) # Matriz de coeficientes de las IRFs no ortogonalizadas
+                               # "n pasos adelante"
 
 # Graficacion de las IRFs
 
-# Definimos el numero pasos adelante
+# Parámetros de las gráficas de las IRFs
 pasos_adelante = np.arange(0, 25)
 int_conf_irf = 0.95
 semilla_irf = 202601
-repeticiones_bootstrap_irf = 100
+repeticiones_bootstrap_irf = 100 # Bootstrappings empleados para construir los IC de las IRFs
 
-# La funcion graficar_grilla_irf() se importa desde el script
-# "funciones_auxiliares_graficacion_VAR.py". Calcula el objeto irf() una sola
-# vez y luego crea cada panel con programacion funcional.
+# Nota: La funcion graficar_grilla_irf() calcula el objeto irf() una sola vez
+# y luego crea cada panel usando funciones auxiliares.
+
 # IRF de las variables del sistema ante distintos choques exogenos.
 irf_no_ortog = graficar_grilla_irf(
     VAR_enders,
@@ -609,10 +599,6 @@ irf_ortog = graficar_grilla_irf(
 )
 
 # Grilla de OIRF: columnas = impulsos; filas = respuestas.
-print(irf_ortog["objeto_irf"].orth_irfs)
-assert len(irf_no_ortog["graficas"]) == len(variables) ** 2
-assert len(irf_ortog["graficas"]) == len(variables) ** 2
-print("VALIDACION_IRF_OK")
 mostrar_graficas()
 
 
@@ -622,10 +608,13 @@ mostrar_graficas()
 
 # La FEVD resume que proporcion de la varianza del error de pronostico de cada
 # variable se atribuye a los choques de cada variable del sistema.
+
+# Cálculo de la FEVD
 horizonte_fevd = 24
 fevd_enders = VAR_enders.fevd(periods=horizonte_fevd)
 fevd_enders.summary()
 
+# Gráfica de la FEVD
 colores_fevd = {
     "dl.IPI": "#8B008B",  # magenta4
     "Unem": "#00CDCD",    # cyan3

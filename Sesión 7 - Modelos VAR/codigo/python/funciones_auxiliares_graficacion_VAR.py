@@ -510,6 +510,60 @@ def graficar_pronostico_var(
     return fig, axes
 
 
+def graficar_pronostico_bootstrap_var(
+    boots: pd.DataFrame,
+    variables=None,
+    colores: dict[str, str] | None = None,
+    figsize=(15, 4),
+    titulo: str = "Pronostico puntual con bootstrapping",
+):
+    """Grafica pronosticos puntuales calculados por bootstrap.
+
+    Parametros
+    ----------
+    boots : pandas.DataFrame
+        Pronosticos puntuales por bootstrap, con una columna por variable.
+    variables : iterable of str, optional
+        Variables que se quieren graficar. Si no se entrega, se usan todas las
+        columnas de `boots`.
+    colores : dict, optional
+        Colores asociados a cada variable. Si una variable no esta en el
+        diccionario, matplotlib asigna el color automaticamente.
+    figsize : tuple, default (15, 4)
+        Tamano de la figura.
+    titulo : str, default "Pronostico puntual con bootstrapping"
+        Titulo general de la figura.
+
+    Retorna
+    -------
+    tuple
+        Figura y ejes con las graficas de pronostico por bootstrap.
+    """
+    boots = _asegurar_dataframe(boots)
+    variables = list(boots.columns) if variables is None else list(variables)
+    colores = colores or {}
+
+    fig, axes = plt.subplots(1, len(variables), figsize=figsize)
+    axes = np.atleast_1d(axes)
+    eje_tiempo_bootstrap = _indice_para_grafica(boots.index)
+
+    for ax, variable in zip(axes, variables):
+        ax.plot(
+            eje_tiempo_bootstrap,
+            boots[variable].to_numpy(),
+            color=colores.get(variable),
+            linewidth=0.8,
+        )
+        ax.set_title(variable, fontsize=11)
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.grid(True, color="#e0e0e0", linewidth=0.8)
+
+    fig.suptitle(titulo, fontsize=11)
+    fig.tight_layout()
+    return fig, axes
+
+
 def graficar_fanchart_var(
     datos,
     pronostico_var: dict,

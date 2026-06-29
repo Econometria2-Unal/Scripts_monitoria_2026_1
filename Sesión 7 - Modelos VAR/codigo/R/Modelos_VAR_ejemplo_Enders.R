@@ -397,19 +397,39 @@ boots_forecast_df = as.data.frame(boots_forecast) %>%
   pivot_longer(cols = -tiempo, names_to = "variable", values_to = "valor")
 
 # Graficas para el pronóstico calculado usando bootstrap
-g_bootstrap = boots_forecast_df %>%
-  ggplot(aes(x = tiempo, y = valor, color = variable)) +
-  geom_linea_actual(ancho = 0.8) +
-  facet_wrap(~ variable, scales = "free_y") +
-  scale_color_manual(values = c("dl.IPI" = "lightblue",
-                                "Unem" = "mediumpurple2",
-                                "dl.CPI" = "sienna1")) +
-  theme_light() +
-  ggtitle("Pronostico puntual con bootstrapping") +
-  labs(subtitle = "Horizonte: 2013T1-2015T4")
+colores_bootstrap = c(
+  "dl.IPI" = "lightblue",
+  "Unem" = "mediumpurple",
+  "dl.CPI" = "sienna"
+)
 
-x11()
-print(g_bootstrap)
+g_bootstrap_dl_ipi = graficar_bootstrap_variable(
+  boots_forecast_df,
+  nombre_variable = "dl.IPI",
+  colores = colores_bootstrap
+)
+
+g_bootstrap_unem = graficar_bootstrap_variable(
+  boots_forecast_df,
+  nombre_variable = "Unem",
+  colores = colores_bootstrap
+)
+
+g_bootstrap_dl_cpi = graficar_bootstrap_variable(
+  boots_forecast_df,
+  nombre_variable = "dl.CPI",
+  colores = colores_bootstrap
+)
+
+x11(width = 15, height = 4)
+grid.arrange(
+  g_bootstrap_dl_ipi,
+  g_bootstrap_unem,
+  g_bootstrap_dl_cpi,
+  ncol = 3,
+  top = grid::textGrob("Pronostico puntual con bootstrapping",
+                       gp = grid::gpar(fontsize = 11))
+)
 
 
 # Funciones de impulso-respuesta no ortogonalizadas ----
@@ -424,11 +444,11 @@ Phi(VAR_enders, nstep = 10) # Esta función nos calcula la matriz de coeficiente
 
 # Graficación de las IRFs
 
-# Definimos el número pasos adelante
+# Parámetros de las gráficas de las IRFs
 pasos_adelante = 0:24
 int_conf_irf = 0.95
 semilla_irf = 202601
-repeticiones_bootstrap_irf = 100
+repeticiones_bootstrap_irf = 100 # Bootstrappings empleados para construir los IC de las IRFs
 
 # La funcion graficar_grilla_irf() calcula el objeto irf() una sola vez
 # y luego crea cada panel con programacion funcional.

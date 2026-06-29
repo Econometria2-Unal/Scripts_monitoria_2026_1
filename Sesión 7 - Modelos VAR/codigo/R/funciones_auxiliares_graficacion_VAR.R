@@ -93,6 +93,45 @@ graficar_ts = function(serie, titulo, color, cortes_y = waiver()){
     )
 }
 
+#' Grafica una variable del pronostico bootstrap.
+#'
+#' @param datos_bootstrap Tabla en formato largo con las columnas `tiempo`,
+#'   `variable` y `valor`.
+#' @param nombre_variable Nombre de la variable que se quiere graficar.
+#' @param colores Vector nombrado con los colores asociados a cada variable.
+#'
+#' @return Una grafica de ggplot2 con el pronostico bootstrap de la variable.
+graficar_bootstrap_variable = function(datos_bootstrap, nombre_variable, colores){
+  datos_variable = datos_bootstrap %>%
+    filter(variable == nombre_variable)
+  
+  datos_variable %>%
+    ggplot(aes(x = tiempo, y = valor)) +
+    geom_linea_actual(ancho = 0.8, color = colores[[nombre_variable]]) +
+    scale_x_continuous(
+      breaks = seq(
+        from = floor(min(datos_variable$tiempo) * 2) / 2,
+        to = ceiling(max(datos_variable$tiempo) * 2) / 2,
+        by = 0.5
+      ),
+      minor_breaks = NULL,
+      expand = expansion(mult = 0.05)
+    ) +
+    scale_y_continuous(minor_breaks = NULL, expand = expansion(mult = 0.05)) +
+    theme_light(base_size = 10) +
+    ggtitle(nombre_variable) +
+    xlab("") +
+    ylab("") +
+    theme(
+      plot.title = element_text(size = 11, hjust = 0.5, margin = margin(b = 4)),
+      axis.text = element_text(size = 9, color = "grey15"),
+      panel.grid.major = element_linea_actual(color = "grey80", ancho = 0.45),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect_actual(color = "grey80", fill = NA, ancho = 0.5),
+      plot.margin = margin(4, 6, 4, 6)
+    )
+}
+
 #' Grafica pronosticos de un modelo VAR.
 #'
 #' @param pronostico Resultado de `predict` aplicado a un modelo VAR.
