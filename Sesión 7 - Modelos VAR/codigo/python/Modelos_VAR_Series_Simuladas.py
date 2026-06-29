@@ -155,44 +155,42 @@ print(pd.DataFrame(Y_t, columns=variables).head())
 
 # %% 1.2 Simulacion de los errores en forma reducida " u_t " ----
 
-# ===
-# Nota: Tenga presente que esta es la parte mas importante de toda la simulacion.
-#       Dado que la forma en la que se simulan dichos errores determinara
-#       todas las caracteristicas de las series simuladas Y_t. Esto ocurre porque
-#       a partir de u_t, usando la formula Y_t = A_0 + A_1 Y_{t-1} + u_t, es que
-#       se construye la serie Y_t. Por tanto, lo crucial de la simulacion es
-#       simular de manera correcta la distribucion de los errores en forma
-#       reducida "u_t".
-# ===
+"""
+Nota: Tenga presente que esta es la parte mas importante de toda la simulacion.
+      Dado que la forma en la que se simulan dichos errores determinara
+      todas las caracteristicas de las series simuladas Y_t. Esto ocurre porque
+      a partir de u_t, usando la formula Y_t = A_0 + A_1 Y_{t-1} + u_t, es que
+      se construye la serie Y_t. Por tanto, lo crucial de la simulacion es
+      simular de manera correcta la distribucion de los errores en forma
+      reducida "u_t".
+"""
 
-# En esta simulacion se quiere que los errores esten correlacionados y que,
-# ademas, tengan desviaciones estandar diferentes. Para ello simulamos:
-#
-#   u_t ~ N_3(0, Sigma_u) ; Distribucion Normal Trivariada
-#
-# La matriz P_chol es triangular inferior. Esto permite construir una matriz de
-# varianzas y covarianzas:
-#
-#   Sigma_u = P_chol * P_chol^{'} ; Donde P_chol es la matriz de la descomposicion de Cholesky
-#
-# Esta construccion es coherente con una identificacion recursiva tipo Cholesky:
-# y_1 es contemporaneamente mas exogena que y_2 y y_3, mientras que y_2 es mas
-# exogena que y_3. Los errores reducidos u_t estaran correlacionados, pero los
-# errores estructurales e_t que los generan son ortogonales.
+"""
+Nota: Detalles de la simulación de los errores "u_t" (reducidos) con 
+      distribución normal multivariada correlacionada
 
-# Acá en la simulación partimos al revés de la metodología de Box Jenkins. 
-# Inicialmente, definimos la matriz de la descomposición de Cholesky "P_chol" 
-# porque ella cumple dos roles importantes: 
-  # 1. Determina el orden de exogenidad de las variables: y1, y2 y y3. 
-  # 2. Determina la estructura de correlación de la matriz de varianzas y covarianzas
-  #    de los errores (i.e. de la matriz Sigma_u_teorica, definida abajo.)
-  
-# Acá en la simulación partimos al revés de la metodología de Box Jenkins. 
-# Inicialmente, definimos la matriz de la descomposición de Cholesky "P_chol" 
-# porque ella cumple dos roles importantes: 
-  # 1. Determina el orden de exogenidad de las variables: y1, y2 y y3. 
-  # 2. Determina la estructura de correlación de la matriz de varianzas y covarianzas
-  #    de los errores (i.e. de la matriz Sigma_u_teorica, definida abajo.)
+ En esta simulacion se quiere que los errores esten correlacionados y que,
+ ademas, tengan desviaciones estandar diferentes. Para ello simulamos:
+
+   u_t ~ N_3(0, Sigma_u) ; Distribucion Normal Trivariada
+
+ La matriz P_chol es triangular inferior. Esto permite construir una matriz de
+ varianzas y covarianzas:
+
+   Sigma_u = P_chol * P_chol^{'} ; Donde P_chol es la matriz de la descomposicion de Cholesky
+
+ Esta construccion es coherente con una identificacion recursiva tipo Cholesky:
+ y_1 es contemporaneamente mas exogena que y_2 y y_3, mientras que y_2 es mas
+ exogena que y_3. Los errores reducidos u_t estaran correlacionados, pero los
+ errores estructurales e_t que los generan son ortogonales.
+
+ Acá en la simulación partimos al revés de la metodología de Box Jenkins. 
+ Inicialmente, definimos la matriz de la descomposición de Cholesky "P_chol" 
+ porque ella cumple dos roles importantes: 
+   1. Determina el orden de exogenidad de las variables: y1, y2 y y3. 
+   2. Determina la estructura de correlación de la matriz de varianzas y covarianzas
+      de los errores (i.e. de la matriz Sigma_u_teorica, definida abajo.)
+"""
 
 # 1.2.1 Construccion de los errores " u_t " usando normal multivariada ----
 
@@ -369,14 +367,26 @@ donde,
                   DataFrames de pandas
     Exiten principalmente, los siguientes tipos de índices temporales: 
         - RangeIndex: Se usa donde las etiquetas no importan mucho
+            
+            e.g. pd.RangeIndex(start = 0, stop = 5000)
+        
         - Index: Si se quiere trabajar con "tiempo numérico"
+            
+            e.g. pd.Index([1900.00, 1900.25, 1900.50])
+            
         - PeriodIndex: Para trabajar con series de tiempo de periodicidad fija
                        mensual, trimestral, anual, ...
+            
+            e.g. pd.period_range("2020Q1", periods = 100, freq = "Q")
+            
         - DatetimeIndex: Para trabajar con series de tiempo con datos calendario
                          Generalmente para series financieras
+            
+            e.g. pd.date_range("2020-01-01", periods=100, freq="D")
+                                    
                          
-                         
-E.g. para crear un objeto de series de tiempo para usar en python: 
+E.g. para crear un objeto de series de tiempo con periodicidad fija
+     para usar en python: 
 
 # De donde provienen los datos
 Y_t = sim_VAR1(Y_t, A_0, A_1, u_t, T) 
@@ -391,11 +401,11 @@ Y_t = pd.DataFrame(Y_t, index=tiempo, columns=variables)
 
 # Creamos el objeto de serie de tiempo de tipo pandas DataFrame
 
-# Se crea un objeto de tipo PeriodIndex qeu permite representar periodos
+# Se crea un objeto de tipo PeriodIndex que permite representar periodos
 # trimestrales 
 tiempo = pd.period_range(start="1900Q1", periods=T, freq="Q", name="tiempo")
 
-# Convertimos la serie en un DataFrame con indice trimestral.
+# Convertimos la matriz Y_t en un DataFrame con indice trimestral.
 Y_t = pd.DataFrame(Y_t, index=tiempo, columns=variables)
 
 # El objeto Y_t ahora es un pandas dataframe que ya se puede utilizar
@@ -568,7 +578,7 @@ mostrar_graficas()
 # Homocedasticidad ===
 
 # statsmodels no tiene un equivalente directo a arch.test() multivariado de
-# vars. Por tanto, se construye una función que permite hacer un arch.test()
+# vars en R. Por tanto, se construye una función que permite hacer un arch.test()
 # univariado para cada uno de los residuales de la regresión, uno por cada
 # variable del VAR.
 arch_24 = prueba_arch_por_ecuacion(residuales, lags=24, variables=variables) # No rechazo
@@ -597,7 +607,7 @@ normalidad_univariada = prueba_normalidad_por_ecuacion(
 
 # Pronostico ===
 
-# Función diseñada para parecerse lo más que se pueda a predict(V.dr, n.ahead = 12, ci = 0.95).
+# Función diseñada para parecerse lo más que se pueda a predict que se usa en R
 pronostico_var = predecir_var(V_dr, n_ahead=12, ci=0.95, indice=Y_t.index)
 print(pronostico_var)
 

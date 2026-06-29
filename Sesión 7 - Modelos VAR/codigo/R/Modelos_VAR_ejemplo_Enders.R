@@ -91,6 +91,8 @@ source(ruta_funciones_auxiliares_var, encoding = "UTF-8")
   # CPI  = indice de precios al consumidor
   # Unem = tasa de desempleo
 Base = readxl::read_excel(ruta_enders)
+
+# Información general de la base de datos
 glimpse(Base)
 
 # Series en niveles.
@@ -142,22 +144,25 @@ tail(Y) # Observaciones finales
 g_dl_ipi = graficar_ts(
   Y[, "dl.IPI"],
   titulo = "Crecimiento logaritmico del IPI",
-  color = "lightblue"
+  color = "lightblue",
+  cortes_y = seq(-0.06, 0.04, by = 0.02)
 )
 
 g_unem = graficar_ts(
   Y[, "Unem"],
   titulo = "Tasa de desempleo",
-  color = "mediumpurple2"
+  color = "mediumpurple",
+  cortes_y = 4:11
 )
 
 g_dl_cpi = graficar_ts(
   Y[, "dl.CPI"],
   titulo = "Inflacion logaritmica del CPI",
-  color = "sienna1"
+  color = "sienna",
+  cortes_y = seq(-0.02, 0.04, by = 0.01)
 )
 
-x11()
+x11(width = 15, height = 4)
 grid.arrange(g_dl_ipi, g_unem, g_dl_cpi, ncol = 3)
 
 
@@ -168,14 +173,14 @@ grid.arrange(g_dl_ipi, g_unem, g_dl_cpi, ncol = 3)
 #       estacionarias! En caso de tener variables no estacionarias, toca tratar
 #       las series, ya sea diferenciadolas o haciendo pruebas de cointegración
 
-adf_ipi_nivel = urca::ur.df(IPI, lags = 6, selectlags = "AIC", type = "trend")
+adf_ipi_nivel = urca::ur.df(IPI, lags = 6, selectlags = "AIC", type = "drift")
 summary(adf_ipi_nivel) # No rechazo: La serie no es estacionaria
 
-adf_cpi_nivel = urca::ur.df(CPI, lags = 6, selectlags = "AIC", type = "trend")
+adf_cpi_nivel = urca::ur.df(CPI, lags = 6, selectlags = "AIC", type = "drift")
 summary(adf_cpi_nivel) # No rechazo: La serie no es estacionaria
 
 adf_unem_nivel = urca::ur.df(UNEM, lags = 6, selectlags = "AIC", type = "drift")
-summary(adf_unem_nivel) # Rechazo: La serie no es estacionaria
+summary(adf_unem_nivel) # Rechazo: La serie es estacionaria
 
 
 # Pruebas ADF sobre las variables que entran al VAR ----
@@ -185,15 +190,15 @@ summary(adf_unem_nivel) # Rechazo: La serie no es estacionaria
 
 adf_dl_ipi = urca::ur.df(Y[, "dl.IPI"], lags = 6, selectlags = "AIC",
                          type = "drift")
-summary(adf_dl_ipi) # Rechazo: La serie no es estacionaria
+summary(adf_dl_ipi) # Rechazo: La serie es estacionaria
 
 adf_dl_cpi = urca::ur.df(Y[, "dl.CPI"], lags = 6, selectlags = "AIC",
                          type = "drift")
-summary(adf_dl_cpi) # Rechazo: La serie no es estacionaria
+summary(adf_dl_cpi) # Rechazo: La serie es estacionaria
 
 adf_unem = urca::ur.df(Y[, "Unem"], lags = 6, selectlags = "AIC",
                        type = "drift")
-summary(adf_unem) # Rechazo: La serie no es estacionaria
+summary(adf_unem) # Rechazo: La serie es estacionaria
 
 
 # ===
@@ -312,17 +317,17 @@ plot(P.20, names = "dl.CPI")
 # Homocedasticidad ----
 
 # Test tipo ARCH multivariado
-arch.test(VAR_enders, lags.multi = 24, multivariate.only = TRUE) # No rechazo
-arch.test(VAR_enders, lags.multi = 12, multivariate.only = TRUE) # No rechazo
+arch.test(VAR_enders, lags.multi = 24, multivariate.only = TRUE) # Rechazo, no se cumple el supuesto
+arch.test(VAR_enders, lags.multi = 12, multivariate.only = TRUE) # Rechazo, no se cumple el supuesto
 
-# Nota: Se cumple el supuesto de homocedasticidad
+# Nota: No se cumple el supuesto de homocedasticidad
 
 # Normalidad ----
 
 # H0 del Jarque-Bera multivariado: los residuales tienen distribucion normal.
-normality.test(VAR_enders) # No rechazo, se cumple el supuesto.
+normality.test(VAR_enders) # Rechazo, no se cumple el supuesto
 
-# Nota: Se cumple el supuesto de normalidad
+# Nota: No se cumple el supuesto de normalidad
 
 # ===
 # 4.4. Pronostico y funciones impulso-respuesta ====

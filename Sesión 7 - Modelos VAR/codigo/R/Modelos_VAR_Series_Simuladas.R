@@ -209,9 +209,9 @@ graficos_errores = graficar_diagnostico_errores(u_t = u_t,
                                                 errores = errores,
                                                 cor_u_muestral = cor_u_muestral)
 
-x11();grid.arrange(graficos_errores$series,
+x11(); grid.arrange(graficos_errores$series,
                    graficos_errores$histograma, ncol = 2)
-x11();grid.arrange(graficos_errores$qq,
+x11(); grid.arrange(graficos_errores$qq,
                    graficos_errores$correlacion, ncol = 2)
 
 # 1.3 Simulación del VAR(1) de 3 variables ----
@@ -267,11 +267,24 @@ Y_t = sim_VAR1(Y_t, A_0, A_1, u_t, T)
 Y_t = ts(Y_t, start=c(1900,1), frequency=4)
 
 # Gráficas de la series simuladas: 
-y1 = graficar_ts(Y_t[,"y_1"], titulo = "Variable y_1", color = "lightblue")
-y2 = graficar_ts(Y_t[,"y_2"], titulo = "Variable y_2", color = "royalblue")
-y3 = graficar_ts(Y_t[,"y_3"], titulo = "Variable y_3", color = "darkorange")
+# Como T = 5000, se grafican solo las primeras observaciones para evitar
+# saturar visualmente los paneles.
+observaciones_grafica_series = 200
+observaciones_grafica_series = min(observaciones_grafica_series, nrow(Y_t))
+Y_t_grafica = window(
+  Y_t,
+  end = time(Y_t)[observaciones_grafica_series]
+)
 
-x11();grid.arrange(y1,y2,y3,ncol=3)
+y1 = graficar_ts(Y_t_grafica[, "y_1"], titulo = "Variable y_1",
+                 color = "lightblue")
+y2 = graficar_ts(Y_t_grafica[, "y_2"], titulo = "Variable y_2",
+                 color = "mediumpurple")
+y3 = graficar_ts(Y_t_grafica[, "y_3"], titulo = "Variable y_3",
+                 color = "sienna")
+
+x11(width = 15, height = 4)
+grid.arrange(y1, y2, y3, ncol = 3) 
 
 # Nota: Recuerden que los modelos VAR requieren de series estacionarias. Por tanto, 
 #       empleamos Test ADF para verificar la estacionariedad de las series. 

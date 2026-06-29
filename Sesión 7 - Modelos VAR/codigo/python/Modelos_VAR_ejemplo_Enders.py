@@ -75,10 +75,10 @@ configurar_entorno_graficas(max_columns=30)
 
 # %% Cargar bases de datos en python usando rutas relativas =========================
 
-# Directorio raiz de la sesion
+# Obtener la ruta del directorio raíz
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-# Directorio con los datos
+# Obtener la ruta del directorio con los datos
 DATA_DIR = BASE_DIR / "datos"
 
 # Ruta donde se encuentra base de datos del Enders (con las variables de interes)
@@ -95,19 +95,83 @@ ruta_enders = DATA_DIR / "ENDERS.xlsx"
   # Unem = tasa de desempleo
 Base = pd.read_excel(ruta_enders)
 
-# Información de la base de datos
+# Información general de la base de datos
 Base.info()
 
 # Primeras observaciones de la base de datos
 print(Base.head())
 
-# Series en niveles.
+# Nota: Para trabajar con series de tiempo en python, debemos transformar
+#       el objeto Base, para que no solo sea un Dataframe de pandas, sino también
+#       tenga un índice temporal. 
+
+"""
+Nota: Para trabajar con series de tiempo en python se necesitan dos tipos 
+de objetos: 
+
+- pandas.core.series.Series: Para series de tiempo univariadas 
+- pandas.core.frame.DataFrame: Para series de tiempo multivariadas
+
+Nota: Un pandas.core.series.Series es básicamente un pandas.core.frame.DataFrame
+      univariado
+
+En python los objetos de series de tiempo tiene dos components:
+
+serie de tiempo en python = datos + indice temporal
+
+donde, 
+
+- datos: Generalmente provienen de numpy.ndarray
+- Indice temporal: Se crea un índice temporal compatible con los Series o 
+                  DataFrames de pandas
+    Exiten principalmente, los siguientes tipos de índices temporales: 
+        - RangeIndex: Se usa donde las etiquetas no importan mucho
+            
+            e.g. pd.RangeIndex(start = 0, stop = 5000)
+        
+        - Index: Si se quiere trabajar con "tiempo numérico"
+            
+            e.g. pd.Index([1900.00, 1900.25, 1900.50])
+            
+        - PeriodIndex: Para trabajar con series de tiempo de periodicidad fija
+                       mensual, trimestral, anual, ...
+            
+            e.g. pd.period_range("2020Q1", periods = 100, freq = "Q")
+            
+        - DatetimeIndex: Para trabajar con series de tiempo con datos calendario
+                         Generalmente para series financieras
+            
+            e.g. pd.date_range("2020-01-01", periods=100, freq="D")
+                                    
+                         
+E.g. para crear un objeto de series de tiempo con periodicidad fija
+     para usar en python: 
+
+# De donde provienen los datos
+Y_t = sim_VAR1(Y_t, A_0, A_1, u_t, T) 
+
+# Índice temporal
+tiempo = pd.period_range(start="1900Q1", periods=T, freq="Q", name="tiempo")
+
+# Serie de tiempo (pandas dataframe)
+Y_t = pd.DataFrame(Y_t, index=tiempo, columns=variables)
+
+"""
+
+# Creación del dataframe con índice temporal, para trabajar series de tiempo
+# en python
+
+# Se crea un objeto de tipo PeriodIndex que permite representar periodos
+# trimestrales 
 tiempo_niveles = pd.period_range(
     start="1960Q1",
     periods=len(Base),
     freq="Q",
     name="tiempo",
 )
+
+# Creamos los objeto individuales de series de tiempo de tipo pandas Series 
+# con las variables individuales de la base de datos
 IPI = pd.Series(Base["IPI"].to_numpy(), index=tiempo_niveles, name="IPI")
 CPI = pd.Series(Base["CPI"].to_numpy(), index=tiempo_niveles, name="CPI")
 UNEM = pd.Series(Base["Unem"].to_numpy(), index=tiempo_niveles, name="Unem")
@@ -135,83 +199,87 @@ Unem = UNEM.loc[dl_IPI.index]
 variables = ["dl.IPI", "Unem", "dl.CPI"]
 
 # Se construye la matriz Y, que contiene las series de tiempo del modelo VAR
-Y = pd.concat([dl_IPI, Unem, dl_CPI], axis=1)
+Y = pd.concat([dl_IPI, Unem, dl_CPI], axis=1) 
+
+# Nota: Recuerde que Y debe ser un objeto tipo pandas dataframe con índice temporal 
+#       para que se pueda trabajar como serie de tiempo en python
+type(Y)
 
 # Se nombran las columnas de la matriz, con las series de tiempo
 Y.columns = variables
 
 # Algunas caracteristicas de las series de tiempo del modelo VAR
-print("Inicio de Y:", Y.index[0])
-print("Fin de Y:", Y.index[-1])
-print(Y.head())
-print(Y.tail())
+print("Inicio de Y:", Y.index[0]) # Periodo donde inician las series
+print("Fin de Y:", Y.index[-1]) # Periodo donde terminan las series
+print(Y.head()) # Observaciones iniciales
+print(Y.tail()) # Observaciones finales
 
 
-# %%
-# ===
+# %% ===
 # 3. Analisis grafico y pruebas de estacionariedad ====
 # ===
 
 # Graficas de las series transformadas que entraran al VAR.
 fig_series, axes_series = plt.subplots(1, 3, figsize=(15, 4))
+
 graficar_ts(
     Y["dl.IPI"],
     titulo="Crecimiento logaritmico del IPI",
     color="lightblue",
     ax=axes_series[0],
 )
+
 graficar_ts(
     Y["Unem"],
     titulo="Tasa de desempleo",
     color="mediumpurple",
     ax=axes_series[1],
 )
+
 graficar_ts(
     Y["dl.CPI"],
     titulo="Inflacion logaritmica del CPI",
     color="sienna",
     ax=axes_series[2],
 )
+
 fig_series.tight_layout()
 mostrar_graficas()
 
 
-# %%
-# Pruebas ADF en niveles ----
+# %% Pruebas ADF en niveles ----
 
 # Nota: Para aplicar un modelo VAR en niveles, todas las variables tienen que ser
 #       estacionarias, entonces se verifica que en efecto las variables sean
 #       estacionarias. En caso de tener variables no estacionarias, toca tratar
 #       las series, ya sea diferenciandolas o haciendo pruebas de cointegracion.
 
-adf_ipi_nivel = adfuller(IPI, maxlag=6, autolag="AIC", regression="ct")
-imprimir_adf(adf_ipi_nivel, "IPI en niveles")
+adf_ipi_nivel = adfuller(IPI, maxlag=6, autolag="AIC", regression="c")
+imprimir_adf(adf_ipi_nivel, "IPI en niveles") # No rechazo: La serie no es estacionaria
 
-adf_cpi_nivel = adfuller(CPI, maxlag=6, autolag="AIC", regression="ct")
-imprimir_adf(adf_cpi_nivel, "CPI en niveles")
+adf_cpi_nivel = adfuller(CPI, maxlag=6, autolag="AIC", regression="c")
+imprimir_adf(adf_cpi_nivel, "CPI en niveles") # No rechazo: La serie no es estacionaria
 
 adf_unem_nivel = adfuller(UNEM, maxlag=6, autolag="AIC", regression="c")
-imprimir_adf(adf_unem_nivel, "Unem en niveles")
+imprimir_adf(adf_unem_nivel, "Unem en niveles") # Rechazo: La serie es estacionaria
 
 
-# %%
-# Pruebas ADF sobre las variables que entran al VAR ----
+# %% Pruebas ADF sobre las variables que entran al VAR ----
 
 # En el VAR se usan la tasa de crecimiento del IPI, la tasa de desempleo y la
 # inflacion. Se verifica que estas variables sean estacionarias.
 
 adf_dl_ipi = adfuller(Y["dl.IPI"], maxlag=6, autolag="AIC", regression="c")
-imprimir_adf(adf_dl_ipi, "dl.IPI")
+imprimir_adf(adf_dl_ipi, "dl.IPI") # Rechazo: La serie es estacionaria
 
 adf_dl_cpi = adfuller(Y["dl.CPI"], maxlag=6, autolag="AIC", regression="c")
-imprimir_adf(adf_dl_cpi, "dl.CPI")
+imprimir_adf(adf_dl_cpi, "dl.CPI") # Rechazo: La serie es estacionaria
 
 adf_unem = adfuller(Y["Unem"], maxlag=6, autolag="AIC", regression="c")
-imprimir_adf(adf_unem, "Unem")
+imprimir_adf(adf_unem, "Unem") # Rechazo: La serie es estacionaria
 
 
-# %%
-# ===
+# %% ===
 # 4. Metodologia Box-Jenkins para series multivariadas ====
 # ===
 
@@ -225,14 +293,13 @@ imprimir_adf(adf_unem, "Unem")
   # 4. Uso del modelo para pronostico y funciones impulso-respuesta.
 
 
-# %%
-# ===
+# %% ===
 # 4.1. Identificacion ====
 # ===
 
-# Para la estimacion usamos un RangeIndex. La escala temporal trimestral se
-# conserva en Y para graficar, pero statsmodels prefiere indices soportados
-# cuando se instancian modelos de series de tiempo.
+# Para crear el objeto VAR con statsmodels quitamos el indice temporal y
+# dejamos solo los datos. El indice trimestral se conserva en Y para
+# graficas y tablas.
 Y_modelo = Y.reset_index(drop=True)
 modelo_enders = VAR(Y_modelo)
 
@@ -265,9 +332,7 @@ imprimir_seleccion_rezagos(
 # libertad.
 p_var = 3
 
-
-# %%
-# ===
+# %% ===
 # 4.2. Estimacion ====
 # ===
 
@@ -292,14 +357,22 @@ VAR_enders = V_dr_1
 # Nota: En statsmodels las raices reportadas por roots deben quedar por fuera
 #       del circulo unitario. Adicionalmente, is_stable() revisa que los valores
 #       propios de la matriz de compania queden dentro del circulo unitario.
+#       Recuerde que la matriz de compania es la que se usa para transformar un 
+#       VAR(p) a un VAR(1), y sobre sus valores propios se puede estudiar la 
+#       estabilidad del modelo transformado al VAR(1)
 raices_var = pd.DataFrame(
     {
         "raiz": VAR_enders.roots,
         "modulo": np.abs(VAR_enders.roots),
     }
 )
+
 print(raices_var)
 print("El proceso es estable:", VAR_enders.is_stable(verbose=True))
+
+# Nota: Note que las raíces del polinomio característico al VAR están por fuera
+#       del círculo unitario y además los valores propios asociados a la matriz
+#       de compañía del modelo VAR representado como un VAR(1) son menores a 1
 
 # Coeficientes estimados
 
@@ -317,23 +390,21 @@ print(Sigma_e)
 print(VAR_enders.summary())
 
 
-# %%
-# ===
+# %% ===
 # 4.3. Validacion de supuestos ====
 # ===
 
 # No autocorrelacion serial ----
 
-# En R se usa serial.test(). En statsmodels usamos el Portmanteau multivariado
-# test_whiteness(); adjusted=False emula la version asintotica.
+# Portmanteau multivariado. En statsmodels usamos test_whiteness().
 P_50 = VAR_enders.test_whiteness(nlags=50, adjusted=False)
-print(P_50.summary())
+print(P_50.summary()) # No rechazo
 
 P_30 = VAR_enders.test_whiteness(nlags=30, adjusted=False)
-print(P_30.summary())
+print(P_30.summary()) # No rechazo
 
 P_20 = VAR_enders.test_whiteness(nlags=20, adjusted=False)
-print(P_20.summary())
+print(P_20.summary()) # No rechazo
 
 P_10 = VAR_enders.test_whiteness(nlags=10, adjusted=False)
 print(P_10.summary())
@@ -351,40 +422,38 @@ figuras_residuales = graficar_diagnostico_residuales_var(
 )
 mostrar_graficas()
 
-# Nota: La decision se toma revisando los p-valores del Portmanteau para los
-#       distintos horizontes de rezagos.
-
+# Nota: Se cumple el supuesto de no autocorrelación serial en los residuales
 
 # Homocedasticidad ----
 
 # statsmodels no tiene un equivalente directo a arch.test() multivariado de
-# vars. Por tanto, se construye una función que permite hacer un arch.test()
+# vars en R. Por tanto, se construye una función que permite hacer un arch.test()
 # univariado para cada uno de los residuales de la regresión, uno por cada
 # variable del VAR.
-arch_24 = prueba_arch_por_ecuacion(residuales_enders, lags=24, variables=variables)
-arch_12 = prueba_arch_por_ecuacion(residuales_enders, lags=12, variables=variables)
+arch_24 = prueba_arch_por_ecuacion(residuales_enders, lags=24, variables=variables) # Rechazo, no se cumple el supuesto
+arch_12 = prueba_arch_por_ecuacion(residuales_enders, lags=12, variables=variables) # Rechazo, no se cumple el supuesto
 
 # Nota: La decision se toma revisando los p-valores de las pruebas ARCH por
 #       ecuacion. Este es un diagnostico univariado aproximado al bloque
-#       multivariado usado por vars::arch.test() en R.
+#       multivariado usado por vars::arch.test() en R. En este caso rechazamos,
+#       por lo que no se cumple el supuesto
 
 
 # Normalidad ----
 
 # H0 del Jarque-Bera multivariado: los residuales tienen distribucion normal.
 normalidad_enders = VAR_enders.test_normality()
-print(normalidad_enders.summary())
+print(normalidad_enders.summary()) # Rechazo, no se cumple el supuesto
 
 normalidad_univariada = prueba_normalidad_por_ecuacion(
     residuales_enders,
     variables=variables,
-)
+) # Rechazo, no se cumple el supuesto
 
-# Nota: Se cumple el supuesto de normalidad si no se rechaza H0.
+# Nota: Jo se cumple el supuesto de normalidad si no se rechaza H0.
 
 
-# %%
-# ===
+# %% ===
 # 4.4. Pronostico y funciones impulso-respuesta ====
 # ===
 
@@ -394,7 +463,7 @@ normalidad_univariada = prueba_normalidad_por_ecuacion(
 horizonte_pronostico = 12
 int_conf_pronostico = 0.95
 
-# Función diseñada para parecerse lo más que se pueda a predict(V.dr, n.ahead = 12, ci = 0.95).
+# Función diseñada para parecerse lo más que se pueda a predict que se usa en R
 pronostico_var = predecir_var(
     VAR_enders,
     n_ahead=horizonte_pronostico,
@@ -417,7 +486,6 @@ mostrar_graficas()
 # Version fanchart, similar a fanchart(predict(...)) en R.
 fig_fanchart, axes_fanchart = graficar_fanchart_var(Y, pronostico_var)
 mostrar_graficas()
-
 
 # %% Pronostico por bootstrapping ----
 
@@ -476,8 +544,7 @@ fig_bootstrap.tight_layout()
 mostrar_graficas()
 
 
-# %%
-# Funciones de impulso-respuesta no ortogonalizadas ----
+# %% Funciones de impulso-respuesta no ortogonalizadas ----
 
 # Nota: Recuerde que para poder calcular las IRF de un modelo VAR
 #       este debe tener su representacion como VMA(infinito).
@@ -514,8 +581,7 @@ print(irf_no_ortog["objeto_irf"].irfs)
 mostrar_graficas()
 
 
-# %%
-# Funciones de impulso-respuesta ortogonalizadas ----
+# %% Funciones de impulso-respuesta ortogonalizadas ----
 
 # Cuando ortog = True, statsmodels usa una descomposicion de Cholesky sobre la
 # matriz de covarianzas de los residuales. Con el orden definido arriba, dl.IPI
@@ -550,8 +616,7 @@ print("VALIDACION_IRF_OK")
 mostrar_graficas()
 
 
-# %%
-# ===
+# %% ===
 # 4.5. Descomposicion de varianza del error de pronostico ====
 # ===
 
@@ -572,3 +637,5 @@ fig_fevd, axes_fevd = graficar_fevd_var(
     colores=colores_fevd,
 )
 mostrar_graficas()
+
+#%%

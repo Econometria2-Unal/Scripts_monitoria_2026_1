@@ -16,25 +16,81 @@ geom_linea_actual = function(..., ancho = 0.5){
   }
 }
 
+#' Crea un elemento de linea compatible con varias versiones de ggplot2.
+#'
+#' @param ... Argumentos adicionales que se entregan a `element_line`.
+#' @param ancho Grosor de la linea.
+#'
+#' @return Un elemento de tema para lineas.
+element_linea_actual = function(..., ancho = 0.5){
+  if (packageVersion("ggplot2") >= "3.4.0") {
+    element_line(..., linewidth = ancho)
+  } else {
+    element_line(..., size = ancho)
+  }
+}
+
+#' Crea un elemento rectangular compatible con varias versiones de ggplot2.
+#'
+#' @param ... Argumentos adicionales que se entregan a `element_rect`.
+#' @param ancho Grosor del borde.
+#'
+#' @return Un elemento de tema rectangular.
+element_rect_actual = function(..., ancho = 0.5){
+  if (packageVersion("ggplot2") >= "3.4.0") {
+    element_rect(..., linewidth = ancho)
+  } else {
+    element_rect(..., size = ancho)
+  }
+}
+
 #' Grafica una serie de tiempo.
 #'
 #' @param serie Serie que se quiere graficar.
 #' @param titulo Titulo de la grafica.
 #' @param color Color de la linea.
+#' @param cortes_y Cortes del eje vertical. Por defecto ggplot2 los calcula.
 #'
 #' @return Una grafica de ggplot2 con la serie de tiempo.
-graficar_ts = function(serie, titulo, color){
-  data.frame(
+graficar_ts = function(serie, titulo, color, cortes_y = waiver()){
+  datos_serie = data.frame(
     tiempo = as.numeric(time(serie)),
     valor = as.numeric(serie)
-  ) %>% 
+  )
+  
+  inicio_decada = floor(min(datos_serie$tiempo) / 10) * 10
+  fin_decada = floor(max(datos_serie$tiempo) / 10) * 10
+  marcas_x = seq(
+    from = inicio_decada,
+    to = fin_decada,
+    by = 10
+  )
+  
+  datos_serie %>% 
     ggplot(aes(x = tiempo, y = valor)) +
-    geom_linea_actual(ancho = 1, color = color) +
-    theme_light() +
+    geom_linea_actual(ancho = 0.45, color = color) +
+    scale_x_continuous(
+      breaks = marcas_x,
+      minor_breaks = NULL,
+      expand = expansion(mult = 0.05)
+    ) +
+    scale_y_continuous(
+      breaks = cortes_y,
+      minor_breaks = NULL,
+      expand = expansion(mult = 0.05)
+    ) +
+    theme_light(base_size = 10) +
     ggtitle(titulo) +
     xlab("") +
     ylab("") +
-    theme(plot.title = element_text(size = 11, hjust = 0.5))
+    theme(
+      plot.title = element_text(size = 11, hjust = 0.5, margin = margin(b = 4)),
+      axis.text = element_text(size = 9, color = "grey15"),
+      panel.grid.major = element_linea_actual(color = "grey80", ancho = 0.45),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect_actual(color = "grey80", fill = NA, ancho = 0.5),
+      plot.margin = margin(4, 6, 4, 6)
+    )
 }
 
 #' Grafica pronosticos de un modelo VAR.
