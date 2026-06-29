@@ -29,8 +29,7 @@ Semestre: 2026-1
 ## En VS Code o Spyder, los bloques marcados con "# %%" se ejecutan por celdas.
 
 
-# %%
-# ===
+# %% ===
 # 1. Importacion de paquetes, rutas y funciones auxiliares ====
 # ===
 
@@ -86,7 +85,7 @@ DATA_DIR = BASE_DIR / "datos"
 ruta_enders = DATA_DIR / "ENDERS.xlsx"
 
 # %% =========================
-# 2. Carga y preparacion de los datos 
+# 2. Carga y preparacion de los datos ===
 # ============================
 
 # La base de datos de Enders contiene series trimestrales de Estados Unidos
@@ -95,7 +94,11 @@ ruta_enders = DATA_DIR / "ENDERS.xlsx"
   # CPI  = indice de precios al consumidor
   # Unem = tasa de desempleo
 Base = pd.read_excel(ruta_enders)
+
+# Información de la base de datos
 Base.info()
+
+# Primeras observaciones de la base de datos
 print(Base.head())
 
 # Series en niveles.
