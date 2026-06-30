@@ -171,8 +171,8 @@ También se grafican las series en niveles. Esta revisión visual es más import
 
 El script resume la metodología en cuatro etapas:
 
-1. Verificar preliminarmente las variables: gráficos, orden de integración y número de rezagos.
-2. Determinar el rango de \(\Pi\), es decir, el número de relaciones de cointegración.
+1. Verificar preliminarmente las variables: gráficos, orden de integración y número de rezagos. El número de rezagos se selecciona a partir de criterios de información sobre el VAR en niveles, pero también revisando que los residuales no presenten autocorrelación serial.
+2. Determinar el rango de \(\Pi\), es decir, el número de relaciones de cointegración, y escoger el modelo apropiado según ese rango.
 3. Analizar \(\beta\), la matriz de cointegración, y \(\alpha\), la matriz de velocidades de ajuste.
 4. Validar supuestos y usar el modelo para pronósticos e impulso-respuesta.
 
@@ -213,15 +213,24 @@ El script evalúa especificaciones con:
 - intercepto;
 - distintos criterios de información mediante `VARselect()`.
 
-En el ejemplo se selecciona un VAR(2) en niveles con intercepto:
+En el ejemplo se selecciona un VAR(3) en niveles con intercepto. El script fija este orden mediante:
 
 ```r
-VAR2 = VAR2_const
+p_var = 3
+VAR3 = VAR3_const
 ```
 
-Este paso es clave porque el número de rezagos afecta el test de Johansen y la dinámica del VECM. No debe elegirse mecánicamente: además de mirar criterios de información, el script revisa autocorrelación serial de residuales usando `serial.test()` en rezagos 12, 24 y 36.
+Este paso es clave porque el número de rezagos afecta el test de Johansen y la dinámica del VECM. No debe elegirse mecánicamente: además de mirar criterios de información, el script revisa autocorrelación serial de residuales usando `serial.test()` en rezagos 12, 16 y 20.
 
-La revisión de 12, 24 y 36 rezagos tiene sentido porque las series son mensuales. El script muestra que puede haber problemas en rezagos cercanos, pero que el comportamiento mejora a horizontes más amplios.
+La revisión de estos rezagos tiene sentido porque las series son mensuales y se quiere comprobar si queda estructura serial no explicada en los residuales. En la versión actual del script, para el VAR(3) con intercepto no se rechaza la hipótesis de no autocorrelación serial en esos puntos de revisión.
+
+Un detalle importante es que un VAR(3) en niveles se reparametriza como un VECM(2), porque el VECM trabaja con \(p-1\) rezagos de las primeras diferencias:
+
+$$
+VAR(3) \rightarrow VECM(2).
+$$
+
+El script enfatiza que, para continuar con la metodología de Johansen, el supuesto más importante en esta etapa es que los residuales del VAR en niveles no tengan correlación serial. Puede haber otros problemas, como heterocedasticidad, pero la ausencia de autocorrelación serial es la condición central para que la dinámica del sistema esté razonablemente capturada.
 
 ### 6. Determinación del rango de cointegración
 
@@ -234,14 +243,49 @@ Se revisan dos criterios:
 | Valor propio máximo, `type = "eigen"` | Contrasta \(H_0: r = j\) contra \(H_1: r = j + 1\). |
 | Traza, `type = "trace"` | Contrasta \(H_0: r \leq j\) contra \(H_1: r > j\). |
 
-También se comparan especificaciones determinísticas:
+También se comparan especificaciones determinísticas. El script explica tres posibilidades para el argumento `ecdet`:
 
 ```r
 ecdet = "none"
 ecdet = "const"
+ecdet = "trend"
 ```
 
-La especificación `ecdet = "none"` evalúa un modelo sin intercepto en la relación de cointegración. La especificación `ecdet = "const"` permite una constante dentro de la relación de cointegración.
+La especificación `ecdet = "none"` evalúa una relación de cointegración sin constante:
+
+$$
+P.Brent_t - \beta P.WTI_t = 0.
+$$
+
+La especificación `ecdet = "const"` permite una constante dentro de la relación de cointegración:
+
+$$
+P.Brent_t - \beta P.WTI_t + c = 0.
+$$
+
+La especificación `ecdet = "trend"` permite una tendencia lineal dentro de la relación de cointegración:
+
+$$
+P.Brent_t - \beta P.WTI_t + c + \delta t = 0.
+$$
+
+Para esta sesión, el caso más importante es `ecdet = "const"`, porque suele ser la especificación práctica más común cuando se permite que la relación de largo plazo tenga intercepto.
+
+El script también fija:
+
+```r
+spec = "transitory"
+```
+
+Esta opción produce una representación del VECM equivalente a la que se trabaja en el curso. Existe también `spec = "longrun"`, pero esa representación no es la que se usa en esta monitoría.
+
+Otro detalle clave es el argumento `K` de `ca.jo()`. En el script:
+
+```r
+K = p_var
+```
+
+Como previamente se estimó un VAR(3), entonces `K = 3` en el test de Johansen, aunque la reparametrización asociada sea un VECM(2). En otras palabras, `K` hace referencia al orden del VAR en niveles, no al número de rezagos en diferencias del VECM.
 
 En el ejemplo, tanto el criterio del valor propio máximo como el criterio de la traza indican cointegración al 5%. Como el sistema tiene dos variables, la conclusión práctica es que existe una relación de cointegración entre Brent y WTI:
 
@@ -249,9 +293,9 @@ $$
 r = 1.
 $$
 
-### 7. Estimación del VECM
+### 7. Estimación del VECM(2)
 
-Una vez determinado el rango de cointegración, el script estima el VECM usando:
+Una vez determinado el rango de cointegración, el script estima el VECM(2) usando:
 
 ```r
 VEC_const = urca::cajorls(eigen_const, r = 1)
@@ -278,13 +322,13 @@ representa el error de equilibrio del periodo anterior, mientras que \(\alpha\) 
 
 ### 8. Tendencia lineal en el modelo
 
-El script usa `lttest()` para evaluar si se debe incluir una tendencia lineal:
+El script usa `lttest()` para evaluar si hay evidencia de una tendencia lineal determinística en el VAR en niveles asociado a la reparametrización del VECM:
 
 ```r
 urca::lttest(eigen_const, r = 1)
 ```
 
-La hipótesis nula es que no existe tendencia lineal. En el ejemplo no se rechaza esa hipótesis, por lo que el modelo final no incluye tendencia lineal.
+La hipótesis nula es que no existe tendencia lineal. En el ejemplo no se rechaza esa hipótesis, por lo que no se incluye tendencia lineal en el VAR en niveles asociado al VECM reparametrizado.
 
 Esta decisión es importante porque los términos determinísticos cambian la interpretación del equilibrio de largo plazo. Incluir una tendencia cuando no corresponde puede distorsionar el análisis de cointegración.
 
@@ -312,7 +356,7 @@ El script valida tres aspectos del modelo reparametrizado:
 
 La validación no es un paso decorativo. Un modelo puede encontrar cointegración y aun así tener residuales problemáticos. Por eso se revisa si los errores se comportan razonablemente como innovaciones.
 
-En el ejemplo se advierte que hay problemas de heterocedasticidad y normalidad. La recomendación del script es usar intervalos de confianza por bootstrap para realizar inferencia más cuidadosa en pronósticos e impulso-respuesta.
+En el ejemplo se cumple el supuesto más importante para esta aplicación: no se detecta autocorrelación serial en los residuales del modelo reparametrizado. Sin embargo, sí se rechazan los supuestos de homocedasticidad y normalidad. Por eso, la recomendación del script es usar intervalos de confianza por bootstrap para realizar inferencia más cuidadosa en pronósticos e impulso-respuesta.
 
 ### 11. Pronóstico del VECM
 
@@ -364,7 +408,9 @@ Como se usan respuestas ortogonalizadas, el orden de las variables importa. El s
 variables = c("P.Brent", "P.WTI")
 ```
 
-Bajo una identificación recursiva tipo Cholesky, la primera variable se interpreta como más contemporáneamente exógena que la segunda.
+Bajo una identificación recursiva tipo Cholesky, la primera variable se interpreta como más contemporáneamente exógena que la segunda. En el orden original, Brent se trata como la variable más exógena y WTI como la más endógena.
+
+Con este orden, el script muestra una interpretación sustantiva de las OIRF: un choque estructural en Brent afecta tanto al precio Brent como al precio WTI, mientras que un choque estructural en WTI no tiene un efecto relevante sobre Brent y su efecto sobre WTI tiende a disiparse hacia cero en el largo plazo.
 
 ### 13. Orden de las variables
 
@@ -378,7 +424,9 @@ El resultado central es que las conclusiones básicas de cointegración y diagn�
 
 Este punto es fundamental: el orden de las variables no es un detalle técnico menor. En OIRF, el orden representa un supuesto económico sobre qué variable puede reaccionar contemporáneamente a cuál.
 
-Por eso, antes de interpretar impulso-respuesta como evidencia económica, se debe justificar el orden elegido. En el script, poner Brent primero equivale a tratarlo como la variable más exógena dentro del sistema.
+Por eso, antes de interpretar impulso-respuesta como evidencia económica, se debe justificar el orden elegido. En el script, poner Brent primero equivale a tratarlo como la variable más exógena dentro del sistema. Al invertir el orden y poner WTI primero, las OIRF cambian sustancialmente: los choques estructurales de WTI pasan a verse más significativos y persistentes.
+
+La conclusión pedagógica es fuerte: el orden de las variables en una identificación por Cholesky no es trivial. Si el orden de exogeneidad no está claro por teoría económica o por evidencia estadística, las conclusiones de impulso-respuesta pueden depender demasiado del supuesto de identificación. El script menciona que una alternativa más estructural para enfrentar este problema son los S-VECM, donde se imponen restricciones económicas explícitas para identificar choques estructurales.
 
 ## Papel de `funciones_auxiliares_VECM.R`
 
