@@ -1,499 +1,981 @@
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-#                           UNIVERSIDAD NACIONAL DE COLOMBIA
-#                            Facultad de Ciencias Económicas 
-#                               Econometría II | Monitoría 
-#
-#                                        Sesión 8   
-#                           Cointegración y metodologia Johansen
-#                                  
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+"""
+Universidad Nacional de Colombia
+Facultad de Ciencias Economicas
 
-#Importamos las librerias necesarias
+Econometria II | Monitoria
+Sesion 8: Cointegracion y metodologia Johansen
 
-import pandas as pd
+Semestre: 2026-1
+"""
+
+# ===
+# Tabla de contenidos
+# ===
+
+# 1. Importacion de paquetes, rutas y funciones auxiliares
+# 2. Carga y preparacion de los datos
+# 3. Introduccion a metodologia Johansen
+# 4. Identificacion del orden de integracion de las series
+# 5. Modelo VAR en niveles
+# 6. Determinacion del rango de la matriz Pi
+#  6.1. Test de Johansen - Sin constante en el vector de cointegracion
+#  6.2. Test de Johansen - Con constante en el vector de cointegracion
+#  6.3. Estimacion del VECM(2) de acuerdo a los resultados del test de Johansen
+#  6.4. Revision de tendencia lineal en la relacion de cointegracion
+# 7. Validacion de supuestos y usos del modelo
+#  7.1. Reparametrizacion del VECM como un VAR en niveles
+#  7.2. Validacion de supuestos de VECM como VAR
+#  7.3. Pronostico del VECM reparametrizado
+#  7.4. Funciones impulso-respuesta para VECM
+# 8. Que pasa si se cambia el orden de las variables en el VECM?
+
+
+# Nota: Tips practicos en Python
+## Para limpiar el entorno en IPython/Jupyter se puede correr: "%reset -f"
+## Para cerrar todas las graficas actualmente abiertas: "plt.close('all')"
+## En VS Code o Spyder, los bloques marcados con "# %%" se ejecutan por celdas.
+
+
+# %% ===
+# 1. Importacion de paquetes, rutas y funciones auxiliares ====
+# ===
+
+# Trabajar con rutas relativas en python
+from pathlib import Path
+
+# Modulos de numpy y pandas
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+import pandas as pd
 
-from statsmodels.tsa.stattools import adfuller
+# Modulos de statsmodels
 from statsmodels.tsa.api import VAR
-from statsmodels.tsa.vector_ar.vecm import coint_johansen
-from statsmodels.tsa.vector_ar.vecm import VECM
-from statsmodels.stats.diagnostic import acorr_ljungbox
-from statsmodels.stats.stattools import jarque_bera
-from statsmodels.stats.diagnostic import het_arch
-from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.tsa.vector_ar.vecm import VECM, coint_johansen
 
-# ============================================
-# 1. Introducción a metodología Johansen
-# ============================================
+# Importar las funciones auxiliares del script "funciones_auxiliares_VECM"
+from funciones_auxiliares_VECM import (
+    configurar_entorno_graficas,
+    extraer_matrices_vecm,
+    graficar_diagnostico_residuales_vecm,
+    graficar_fanchart_vecm,
+    graficar_grilla_irf,
+    graficar_pronostico_vecm,
+    graficar_series_vecm,
+    imprimir_adf,
+    imprimir_seleccion_rezagos,
+    imprimir_tabla_johansen,
+    mostrar_graficas,
+    predecir_vecm,
+    prueba_arch_por_ecuacion,
+    prueba_normalidad_por_ecuacion,
+)
 
-# Aspectos generales de la metodología de Johansen ----
+"""
+Nota: Para mirar la documentacion de cada una de las funciones, puede usar el
+      comando help(<funcion>) desde la terminal interactiva de IPython. E.g. para
+      ver la documentacion de la funcion "graficar_grilla_irf", use el comando
+      help(graficar_grilla_irf).
+"""
 
-# Consiste en un procedimiento en 4 etapas: 
+# Para configurar las caracteristicas de las graficas
+configurar_entorno_graficas(max_columns=30)
 
-## Etapa 1: Verificación preliminar de las variables a trabajar (Orden de 
-#            integración y gráficas) e Identificación del número de rezagos del 
-#            VECM mediante criterios de información sobre el VAR en niveles 
-## Etapa 2: Determinación del rango de la matriz Pi (es decir del número de 
-#            relaciones de cointegración) y estimación del VECM
-## Etapa 3: Análisis de la matriz beta (matriz que contiene el vector de 
-#            cointegración) y matriz alpha (matriz que contiene los parámetros 
-#            de velocidad de ajuste)
-## Etapa 4: Validación de supuestos y usos del modelo 
 
+# %% Cargar bases de datos en python usando rutas relativas =========================
+
+# Obtener la ruta del directorio raiz
+BASE_DIR = Path(__file__).resolve().parents[2]
+
+# Obtener la ruta del directorio con los datos
+DATA_DIR = BASE_DIR / "datos"
+
+# Ruta donde se encuentra la base de datos de petroleo
+ruta_petroleo = DATA_DIR / "Petróleo.xlsx"
+
+
+# %% ===
+# 2. Carga y preparacion de los datos ====
+# ===
 
 # Ejemplo 1: Precio de referencia Brent y WTI
 
-# Vamos a utilizar una serie del precio spot del petróleo de referencia Brent y 
-# una serie del precio spot del petróleo de referencia WTI. Las series tienen 
-# frecuencia mensual y comprenden el periodo de Enero del 2000 a Diciembre de 2020.
+# Vamos a utilizar una serie del precio spot del petroleo de referencia Brent y
+# una serie del precio spot del petroleo de referencia WTI. Las series tienen
+# frecuencia mensual y comprenden el periodo de enero del 2000 a diciembre de
+# 2020.
+
+# Base de datos con las series de petroleo.
+Data = pd.read_excel(ruta_petroleo)
+
+# Informacion general de la base de datos.
+Data.info()
+
+# Indice temporal mensual de las series.
+tiempo = pd.period_range(
+    start="2000-01",
+    periods=len(Data),
+    freq="M",
+    name="tiempo",
+)
+
+# Series en niveles.
+P_Brent = pd.Series(Data["Brent"].to_numpy(), index=tiempo, name="P.Brent")
+P_WTI = pd.Series(Data["WTI"].to_numpy(), index=tiempo, name="P.WTI")
+
+# Variables que se modelaran mediante el VECM.
+variables = ["P.Brent", "P.WTI"]
+
+# Se construye la matriz Y, que contiene las series de tiempo del modelo.
+Y = pd.concat([P_Brent, P_WTI], axis=1)
+Y.columns = variables
+
+# Algunas caracteristicas de las series de tiempo del modelo.
+print("Inicio de Y:", Y.index[0])
+print("Fin de Y:", Y.index[-1])
+print(Y.head())
+print(Y.tail())
+
+
+# %% Graficas de las series ----
+
+colores_petroleo = {"P.Brent": "lightblue", "P.WTI": "coral"}
+etiquetas_petroleo = {"P.Brent": "Brent", "P.WTI": "WTI"}
+
+fig_precios, ax_precios = graficar_series_vecm(
+    Y,
+    variables=variables,
+    colores=colores_petroleo,
+    etiquetas=etiquetas_petroleo,
+    titulo="Precios spot del petroleo",
+    subtitulo="Petroleo Brent y WTI",
+)
+mostrar_graficas()
+
+
+# %% ===
+# 3. Introduccion a metodologia Johansen ====
+# ===
+
+# Aspectos generales de la metodologia de Johansen ----
+
+# Consiste en un procedimiento en 4 etapas:
+
+## Etapa 1: Verificacion preliminar de las variables a trabajar (orden de
+#            integracion y graficas) e identificacion del numero de rezagos del
+#            VECM mediante criterios de informacion sobre el VAR en niveles y
+#            seleccionando el numero de rezagos tal que los errores sean ruido
+#            blanco.
+## Etapa 2: Determinacion del rango de la matriz Pi, es decir, del numero de
+#            relaciones de cointegracion, y estimacion del modelo apropiado
+#            dependiendo del rango de la matriz Pi.
+## Etapa 3: Analisis de la matriz beta, que contiene el vector de cointegracion,
+#            y de la matriz alpha, que contiene los parametros de velocidad de
+#            ajuste.
+## Etapa 4: Validacion de supuestos y usos del modelo (pronosticos e IRF).
+
+
+# %% ===
+# 4. Identificacion del orden de integracion de las series ====
+# ===
+
+# Procedemos a hacer las pruebas de raiz unitaria para identificar el orden de
+# integracion de las dos series.
+
+# En statsmodels:
+# "ct" -> tendencia + constante
+# "c"  -> solo constante
+# "n"  -> sin constante
+
+
+# %% Referencia Brent ----
+
+adf_brent_tendencia = adfuller(
+    P_Brent,
+    maxlag=12,
+    autolag=None,
+    regression="ct",
+)
+imprimir_adf(adf_brent_tendencia, "P.Brent con tendencia")  # Tendencia no significativa
+
+adf_brent_deriva = adfuller(
+    P_Brent,
+    maxlag=12,
+    autolag=None,
+    regression="c",
+)
+imprimir_adf(adf_brent_deriva, "P.Brent con deriva")  # Deriva no significativa
+
+adf_brent_none = adfuller(
+    P_Brent,
+    maxlag=12,
+    autolag=None,
+    regression="n",
+)
+imprimir_adf(adf_brent_none, "P.Brent sin terminos deterministas")  # Serie no estacionaria
+
+
+# %% Referencia WTI ----
+
+adf_wti_tendencia = adfuller(
+    P_WTI,
+    maxlag=12,
+    autolag=None,
+    regression="ct",
+)
+imprimir_adf(adf_wti_tendencia, "P.WTI con tendencia")  # Tendencia no significativa
+
+adf_wti_deriva = adfuller(
+    P_WTI,
+    maxlag=12,
+    autolag=None,
+    regression="c",
+)
+imprimir_adf(adf_wti_deriva, "P.WTI con deriva")  # Deriva no significativa
+
+adf_wti_none = adfuller(
+    P_WTI,
+    maxlag=12,
+    autolag=None,
+    regression="n",
+)
+imprimir_adf(adf_wti_none, "P.WTI sin terminos deterministas")  # Serie no estacionaria
+
+
+# %% Aplicamos diferenciacion ----
+
+d_P_Brent = P_Brent.diff().dropna()
+d_P_WTI = P_WTI.diff().dropna()
+
+adf_d_brent = adfuller(
+    d_P_Brent,
+    maxlag=12,
+    autolag=None,
+    regression="n",
+)
+imprimir_adf(adf_d_brent, "Diferencia de P.Brent")  # P.Brent en niveles es I(1)
+
+adf_d_wti = adfuller(
+    d_P_WTI,
+    maxlag=12,
+    autolag=None,
+    regression="n",
+)
+imprimir_adf(adf_d_wti, "Diferencia de P.WTI")  # P.WTI en niveles es I(1)
+
+
+# %% ===
+# 5. Modelo VAR en niveles ====
+# ===
+
+# Posteriormente, estimaremos un VAR en niveles para determinar el numero de
+# rezagos del VECM.
+
+# Nota: Se analizaran los criterios de informacion sobre el VAR en niveles.
+
+# Para estimar con statsmodels se conserva una matriz sin indice temporal
+# especial. El indice mensual se conserva en Y para graficas y tablas.
+Y_modelo = Y.reset_index(drop=True)
+modelo_petroleo = VAR(Y_modelo)
+
+# Seleccion de rezagos para un VAR con tendencia e intercepto.
+seleccion_rezagos_both = modelo_petroleo.select_order(maxlags=6, trend="ct")
+imprimir_seleccion_rezagos(
+    seleccion_rezagos_both,
+    "Seleccion de rezagos para un VAR con tendencia e intercepto",
+)
+
+# Se trabaja con p = 3 porque AIC/FPE sugieren este rezago.
+p_var = 3
+
+VAR3_both = modelo_petroleo.fit(p_var, trend="ct")
+print(VAR3_both.summary())  # Tendencia no significativa
+
+# Seleccion de rezagos para un VAR con solo intercepto.
+seleccion_rezagos_const = modelo_petroleo.select_order(maxlags=6, trend="c")
+imprimir_seleccion_rezagos(
+    seleccion_rezagos_const,
+    "Seleccion de rezagos para un VAR con solo intercepto",
+)
+
+VAR3_const = modelo_petroleo.fit(p_var, trend="c")
+print(VAR3_const.summary())  # Intercepto significativo
+
+# Seleccion de rezagos para un VAR sin terminos deterministicos.
+seleccion_rezagos_none = modelo_petroleo.select_order(maxlags=6, trend="n")
+imprimir_seleccion_rezagos(
+    seleccion_rezagos_none,
+    "Seleccion de rezagos para un VAR sin terminos deterministicos",
+    incluir_rezago_cero=False,
+)
+
+VAR3_none = modelo_petroleo.fit(p_var, trend="n")
+print(VAR3_none.summary())
+
+# Dado que al estimar el VAR con constante, el intercepto en este modelo
+# resulto significativo, decidimos estimar un VAR con constante.
+
+# Elegimos VAR(3) en niveles.
+VAR3 = VAR3_const
+
+# Note que como se estimo un VAR(3), su reparametrizacion como un VECM sera un
+# VECM(2). Ademas, dicha reparametrizacion siempre se podra hacer
+# independientemente de si las variables del VAR son I(0) o I(1).
+
+# Nota: Los residuales del modelo VAR en niveles deben ser ruido blanco,
+#       independientemente de si las variables del VAR en niveles son I(0) o
+#       son I(1). Si se escogio el numero adecuado de rezagos en el VAR, siempre
+#       se podra garantizar que esos residuales seran ruido blanco.
+
+# Nota: Tambien recuerde que en teoria, los errores del VAR en niveles deben ser
+#       los mismos errores que los del VECM. Nota de la nota: recuerde que los
+#       errores son teoricos y los residuales son una aproximacion a los errores,
+#       pero no son los errores.
+
+
+# %% Validacion preliminar de los residuales del VAR ----
+
+# Vamos a analizar el comportamiento de los residuales. Dado que es una serie
+# mensual, analicemos su comportamiento en puntos criticos.
+
+# No autocorrelacion serial ===
+
+P_12 = VAR3.test_whiteness(nlags=12, adjusted=False)
+print(P_12.summary())  # No rechazo, se cumple el supuesto
+
+P_16 = VAR3.test_whiteness(nlags=16, adjusted=False)
+print(P_16.summary())  # No rechazo, se cumple el supuesto
+
+P_20 = VAR3.test_whiteness(nlags=20, adjusted=False)
+print(P_20.summary())  # No rechazo, se cumple el supuesto
+
+# Validacion grafica de otros supuestos ===
+
+# Graficamos los residuales para 12 lags.
+residuales_var = pd.DataFrame(
+    np.asarray(VAR3.resid),
+    index=Y.index[VAR3.k_ar :],
+    columns=variables,
+)
+
+figuras_residuales_var = graficar_diagnostico_residuales_vecm(
+    residuales_var,
+    lags=12,
+)
+mostrar_graficas()
+
+# Nota: Lo mas importante para seguir con el procedimiento de la metodologia de
+#       Johansen, es que los residuales no tengan correlacion serial. Puede que
+#       no sean exactamente ruido blanco, si e.g. tienen heterocedasticidad, pero
+#       lo fundamental es que los residuales no tengan correlacion serial.
+
+
+# %% ===
+# 6. Determinacion del rango de la matriz Pi ====
+# ===
+
+# La funcion coint_johansen de statsmodels permite realizar el test de Johansen
+# en Python.
+
+# Argumentos del test de Johansen
+
+# Para revisar todos los argumentos del test de Johansen se puede usar:
+# help(coint_johansen)
+
+# En statsmodels:
+# ecdet = "none"  -> det_order = -1
+# ecdet = "const" -> det_order = 0
+# ecdet = "trend" -> det_order = 1
+
+# En statsmodels se usa k_ar_diff = p - 1.
+k_ar_diff = p_var - 1
+
+# Nota: Existen 3 versiones diferentes del test de cointegracion de Johansen.
+#       En statsmodels se controlan con det_order:
+#       1) det_order = -1: Relacion de cointegracion sin constante.
+#                          P.Brent - beta * P.WTI = 0
+#                          P.Brent = beta * P.WTI
+#       2) det_order = 0: Relacion de cointegracion con constante.
+#                         P.Brent - beta * P.WTI + c = 0
+#                         P.Brent = beta * P.WTI - c
+#       3) det_order = 1: Relacion de cointegracion con tendencia lineal.
+#                         beta' * Y_t + c + delta * t = 0
+#                         P.Brent = beta * P.WTI - c - delta * t
+
+# Donde "beta" es el coeficiente de cointegracion que aparece en el vector de
+# cointegracion.
+
+# Nota: En R, para el curso se trabaja con la especificacion spec = "transitory"
+#       en ca.jo, porque genera una representacion del modelo VEC equivalente a
+#       la que se ve teoricamente en clase. La especificacion spec = "longrun"
+#       es otra manera de representar el modelo VAR, pero esa representacion no
+#       se trabaja en el curso. En statsmodels, coint_johansen no expone un
+#       argumento llamado spec; por eso se trabaja directamente con la
+#       parametrizacion disponible en la funcion.
+
+# Nota: En R, el argumento K del test de Johansen determina el orden del VAR en
+#       niveles estimado previamente. E.g., si se estima un VAR(3), entonces
+#       K = 3 en ca.jo, a pesar de que la reparametrizacion de ese VAR(3) sea un
+#       VECM(2). En Python, coint_johansen usa k_ar_diff, que corresponde al
+#       numero de rezagos en diferencias. Por eso, si el VAR en niveles es VAR(3),
+#       se usa k_ar_diff = 2.
+
+
+# %% ===
+# 6.1. Test de Johansen - Sin constante en el vector de cointegracion ====
+# ===
+
+# Nota: Estamos en el caso det_order = -1, que corresponde a una relacion de
+#       cointegracion sin constante:
+#       P.Brent - beta * P.WTI = 0, es decir, P.Brent = beta * P.WTI.
+
+# Nota: Hay dos maneras de hacer el test de Johansen:
+#       1. Criterio del valor propio maximo.
+#       2. Criterio de la traza.
+
+# Criterio del valor propio maximo ----
+
+# Generalmente es la prueba preferida y la mas robusta.
+
+# Dado que solo hay dos variables, se realiza el siguiente procedimiento
+# secuencial:
+
+# H0: r = 0 vs H1: r = 1,
+# luego H0: r = 1 vs H1: r = 2.
+# Aqui p = 2 variables y K = 3 rezagos, pues se estimo un VAR(3).
+
+johansen_test_none = coint_johansen(
+    Y_modelo,
+    det_order=-1,
+    k_ar_diff=k_ar_diff,
+)
+
+eigen_table_none = imprimir_tabla_johansen(
+    johansen_test_none,
+    tipo="eigen",
+    titulo="Johansen sin constante - criterio del valor propio maximo",
+)
+
+# La conclusion se obtiene comparando secuencialmente cada estadistico con sus
+# valores criticos. En Python conviene revisar la tabla impresa, porque los
+# valores criticos de statsmodels pueden no coincidir exactamente con los de R.
+
+# Nota: Note que el orden del VECM no determina cuantas pruebas secuenciales se
+#       deben realizar en el test de Johansen. Eso solo esta determinado por el
+#       numero de variables que tengo en el VECM.
+
+
+# Criterio de la traza ----
+
+# Al tener el VECM solo dos variables, el procedimiento secuencial a realizar es:
+
+# H0: r = 0 vs H1: r >= 1,
+# luego H0: r <= 1 vs H1: r > 1.
+# Aqui p = 2 variables y K = 3 rezagos, pues se estimo un VAR(3).
+
+trace_table_none = imprimir_tabla_johansen(
+    johansen_test_none,
+    tipo="trace",
+    titulo="Johansen sin constante - criterio de la traza",
+)
+
+
+# %% ===
+# 6.2. Test de Johansen - Con constante en el vector de cointegracion ====
+# ===
+
+# Nota: Estamos en el caso det_order = 0, que corresponde a una relacion de
+#       cointegracion con constante:
+#       P.Brent - beta * P.WTI + c = 0, es decir,
+#       P.Brent = beta * P.WTI - c.
+
+# ===
+# Nota: Este es el caso mas comun, entonces por lo general trabajaremos con
+#       det_order = 0 en coint_johansen y con deterministic = "ci" en VECM; es
+#       decir, diremos que la relacion de cointegracion incluye una constante.
+# ===
+
+# Criterio del valor propio maximo ----
+
+johansen_test_const = coint_johansen(
+    Y_modelo,
+    det_order=0,
+    k_ar_diff=k_ar_diff,
+)
+
+eigen_table_const = imprimir_tabla_johansen(
+    johansen_test_const,
+    tipo="eigen",
+    titulo="Johansen con constante - criterio del valor propio maximo",
+)
 
+# En este caso se revisa si primero se rechaza la hipotesis nula r = 0 y luego
+# si no se rechaza la hipotesis nula r = 1. Con esa lectura secuencial se
+# concluye si existe una relacion de cointegracion.
+
+
+# Criterio de la traza ----
+
+trace_table_const = imprimir_tabla_johansen(
+    johansen_test_const,
+    tipo="trace",
+    titulo="Johansen con constante - criterio de la traza",
+)
+
+# Nuevamente, la decision se obtiene revisando la secuencia de hipotesis sobre
+# el rango de cointegracion y comparando cada estadistico con sus valores
+# criticos.
+
+
+# %% ===
+# 6.3. Estimacion del VECM(2) de acuerdo a los resultados del test de Johansen ====
+# ===
+
+# Especificaciones deterministicas en statsmodels:
+# "n"    - no deterministic terms
+# "co"   - constant outside the cointegration relation
+# "ci"   - constant within the cointegration relation
+# "lo"   - linear trend outside the cointegration relation
+# "li"   - linear trend within the cointegration relation
+
+
+# %% Sin constante ----
 
+# En statsmodels la clase VECM permite estimar directamente el modelo VEC.
+# Usamos coint_rank=1 para indicar que hay una relacion de cointegracion.
+VEC_none = VECM(
+    Y_modelo,
+    k_ar_diff=k_ar_diff,
+    coint_rank=1,
+    deterministic="n",
+)
+VEC_none_fit = VEC_none.fit()
+print(VEC_none_fit.summary())
+
+# Con esta funcion auxiliar obtenemos el vector de cointegracion normalizado y
+# los coeficientes de velocidad de ajuste.
+matrices_vecm_none = extraer_matrices_vecm(VEC_none_fit, variables=variables)
 
-#Vamos a cargas las series
-data = pd.read_excel("Petróleo.xlsx")
-data.head()
+print("\nVector de cointegracion normalizado (beta):")
+print(matrices_vecm_none["beta"])
+
+print("\nVelocidades de ajuste (alpha):")
+print(matrices_vecm_none["alpha"])
 
-#Creamos las series de tiempo
 
-data.index = pd.date_range(start="2000-01-01", periods=len(data), freq="MS")
+# %% Con constante ----
 
-Brent = data["Brent"]
-Brent.head()
+# Estimamos ahora el VECM con constante en la relacion de cointegracion.
+VEC_const = VECM(
+    Y_modelo,
+    k_ar_diff=k_ar_diff,
+    coint_rank=1,
+    deterministic="ci",
+)
+VEC_const_fit = VEC_const.fit()
+print(VEC_const_fit.summary())
 
-WTI = data["WTI"]
-WTI.head()
+# Vector de cointegracion (beta), constante de cointegracion y velocidad de
+# ajuste (alpha).
+matrices_vecm_const = extraer_matrices_vecm(VEC_const_fit, variables=variables)
 
-#Graficamos las series
+print("\nVector de cointegracion normalizado (beta):")
+print(matrices_vecm_const["beta"])
 
-fig, ax = plt.subplots(figsize=(12, 5))
-ax.plot(Brent.index, Brent, label="Brent", color="lightblue", linewidth=1.5)
-ax.plot(WTI.index,   WTI,   label="WTI",   color="coral",     linewidth=1.5)
-ax.set_title("Precios spot del petróleo\n(Petróleo Brent & WTI)", fontsize=13)
-ax.set_xlabel("")
-ax.set_ylabel("USD por barril")
-ax.legend(loc="lower center", ncol=2, frameon=False)
-ax.spines[["top", "right"]].set_visible(False)
-plt.tight_layout()
-plt.show()
- 
-# =========================================================
-# 1. Identificación del orden de integración de las series
-# =========================================================
+print("\nConstante de cointegracion:")
+print(matrices_vecm_const["constante_cointegracion"])
 
-# Procedemos a hacer las pruebas de raíz unitaria (Para identificar el orden de 
-# integración de las dos series)
+print("\nVelocidades de ajuste (alpha):")
+print(matrices_vecm_const["alpha"])
 
-#'ct' → tendencia + constante  (equivale a type='trend' en R)
-#'c'  → solo constante          (equivale a type='drift' en R)
-#'n'  → sin constante           (equivale a type='none'  en R)
 
-#~~~~ BRENT ~~~~#
+# %% ===
+# 6.4. Revision de tendencia lineal en la relacion de cointegracion ====
+# ===
 
-adf_Brent = adfuller(Brent,regression="n", maxlag=12)
+# La funcion lttest del paquete urca permite determinar en R la existencia de
+# una tendencia lineal deterministica en el VAR en niveles asociado a la
+# reparametrizacion del VECM.
 
-print("ADF statistic:", adf_Brent[0])
-print("Critical values:")
-for key, value in adf_Brent[4].items():
-    print(f"{key}: {value}");print("p-value:", adf_Brent[1])
+# En Python no hay un equivalente directo de lttest en statsmodels. Por tanto,
+# aqui se estima una especificacion con constante y tendencia dentro de la
+# relacion de cointegracion como revision practica.
 
+# En terminos de la documentacion de lttest, la hipotesis seria:
 
-#~~~~ WTI ~~~~#
+# H0: No existencia de tendencia lineal en el VAR en niveles asociado a la
+#     reparametrizacion del VECM.
+# H1: Existencia de tendencia lineal en el VAR en niveles asociado a la
+#     reparametrizacion del VECM.
 
-adf_WTI = adfuller(WTI,regression="n", maxlag=12)
+VEC_tendencia = VECM(
+    Y_modelo,
+    k_ar_diff=k_ar_diff,
+    coint_rank=1,
+    deterministic="cili",
+)
+VEC_tendencia_fit = VEC_tendencia.fit()
+print(VEC_tendencia_fit.summary())
 
-print("ADF statistic:", adf_WTI[0])
-print("Critical values:")
-for key, value in adf_WTI[4].items():
-    print(f"{key}: {value}");print("p-value:", adf_WTI[1])
+# No se encuentra evidencia practica para incluir tendencia lineal, por lo que
+# no se incluye tendencia lineal en el VAR en niveles asociado a la
+# reparametrizacion del VECM.
 
 
-#Las series no son estacionarias, por lo que aplicamos diferenciación
+# %% ===
+# 7. Validacion de supuestos y usos del modelo ====
+# ===
 
-Brent_diff = Brent.diff().dropna()
-WTI_diff = WTI.diff().dropna()
 
+# %% ===
+# 7.1. Reparametrizacion del VECM como un VAR en niveles ====
+# ===
 
+# Nota: Dados los resultados anteriores, se usara el modelo VEC con constante en
+# el vector de cointegracion.
 
-#Volvemos a aplicar la prueba ADF sobre las series diferenciadas
+# Nota: Luego de estimar el modelo VECM, en R se puede reparametrizar el modelo
+#       como un VAR en niveles usando la funcion vec2var del paquete vars.
+#       En Python, statsmodels guarda esta representacion directamente dentro
+#       del resultado estimado.
 
-#~~~~ Brent diferenciada ~~~#
+# statsmodels guarda la reparametrizacion del VECM como VAR en niveles en
+# var_rep. Cada elemento corresponde a una matriz A_i del VAR(p).
 
-adf_Brent_diff = adfuller(Brent_diff,regression="n", maxlag=12)
+for i, matriz in enumerate(VEC_const_fit.var_rep, start=1):
+    matriz_ai = pd.DataFrame(
+        matriz,
+        index=variables,
+        columns=[f"L{i}.{variable}" for variable in variables],
+    )
+    print(f"\nMatriz A_{i} de la reparametrizacion VAR")
+    print(matriz_ai)
 
-print("ADF statistic:", adf_Brent_diff[0])
-print("Critical values:")
-for key, value in adf_Brent_diff[4].items():
-    print(f"{key}: {value}");print("p-value:", adf_Brent_diff[1])
+# Esto es importante dado que se necesita el modelo VEC reparametrizado como un
+# VAR en niveles para poder validar los supuestos y hacer uso del modelo.
+
+
+# %% ===
+# 7.2. Validacion de supuestos de VECM como VAR ====
+# ===
+
+# Autocorrelacion ----
+
+# En statsmodels, test_whiteness aplica una prueba Portmanteau. La version
+# asintotica se obtiene con adjusted=False, mientras que adjusted=True aplica
+# una correccion para muestra pequena cuando esta disponible.
 
+P_12_V = VEC_const_fit.test_whiteness(nlags=12)
+print(P_12_V.summary())  # No rechaza H0
 
-#~~~~ WTI diferenciada ~~~#
+P_24_V = VEC_const_fit.test_whiteness(nlags=24)
+print(P_24_V.summary())  # No rechaza H0
+
+P_36_V = VEC_const_fit.test_whiteness(nlags=36)
+print(P_36_V.summary())  # No rechaza H0
+
+# Nota: Se cumple el supuesto de no correlacion serial en los residuales.
 
-adf_WTI_diff = adfuller(WTI_diff,regression="n", maxlag=12)
 
-print("ADF statistic:", adf_WTI_diff[0])
-print("Critical values:")
-for key, value in adf_WTI_diff[4].items():
-    print(f"{key}: {value}");print("p-value:", adf_WTI_diff[1])
+# Homocedasticidad ----
 
+# statsmodels no tiene un equivalente directo a arch.test() multivariado de vars
+# en R. Por tanto, se construye una funcion que permite hacer un arch.test()
+# univariado para cada uno de los residuales de la regresion, uno por cada
+# variable del VECM.
+residuales_vecm = pd.DataFrame(
+    np.asarray(VEC_const_fit.resid),
+    index=Y.index[VEC_const_fit.k_ar :],
+    columns=variables,
+)
+
+arch_vecm_24 = prueba_arch_por_ecuacion(
+    residuales_vecm,
+    lags=24,
+    variables=variables,
+)
+arch_vecm_12 = prueba_arch_por_ecuacion(
+    residuales_vecm,
+    lags=12,
+    variables=variables,
+)
+
+# Nota: No se cumple el supuesto de homocedasticidad en los residuales.
+
+
+# Normalidad ----
+
+# H0 del Jarque-Bera multivariado: los residuales tienen distribucion normal.
+normalidad_vecm = VEC_const_fit.test_normality()
+print(normalidad_vecm.summary())
+
+normalidad_univariada_vecm = prueba_normalidad_por_ecuacion(
+    residuales_vecm,
+    variables=variables,
+)
+
+# Nota: No se cumple el supuesto de normalidad en los residuales.
+
+# Nota: Se cumple el supuesto mas importante, que es el de no correlacion serial
+#       en los residuales del modelo.
+
+# Nota: Como se violan los supuestos de heterocedasticidad y normalidad, hay que
+#       calcular los intervalos de confianza mediante bootstrapping para poder
+#       hacer inferencia estadistica correcta, tanto en los pronosticos como en
+#       las OIRF.
+
+
+# %% ===
+# 7.3. Pronostico del VECM reparametrizado ====
+# ===
+
+# Recuerden que debido al incumplimiento de normalidad, los intervalos de
+# confianza deben computarse por bootstrapping cuando se quiera hacer inferencia
+# estadistica mas robusta.
+
+# Especificaciones del pronostico.
+horizonte_pronostico = 12
+int_conf_pronostico = 0.95
+
+# Pronostico del modelo VEC.
+pronostico_VECM = predecir_vecm(
+    VEC_const_fit,
+    n_ahead=horizonte_pronostico,
+    ci=int_conf_pronostico,
+    indice=Y.index,
+    variables=variables,
+)
+print(pronostico_VECM)
+
+# Grafica del pronostico del modelo VEC.
+fig_pronostico, axes_pronostico = graficar_pronostico_vecm(
+    pronostico_VECM["pronostico"],
+    pronostico_VECM["inferior"],
+    pronostico_VECM["superior"],
+)
+fig_pronostico.suptitle("Pronostico VECM", fontsize=11)
+fig_pronostico.tight_layout()
+mostrar_graficas()
 
-#Ambas series al diferenciarlas se vuelven estacionarias, 
-# por lo que ambas series son I(1)
+# Version fanchart, similar a fanchart(predict(...)) en R.
+fig_fanchart, axes_fanchart = graficar_fanchart_vecm(Y, pronostico_VECM)
+mostrar_graficas()
 
+
+# %% ===
+# 7.4. Funciones impulso-respuesta para VECM ====
+# ===
+
+# Parametros de las graficas de las IRFs.
+pasos_adelante = np.arange(0, 19)
+int_conf_irf = 0.95
+semilla_irf = 202601
+repeticiones_bootstrap_irf = 100
+
+# Bootstrappings empleados para construir los IC de las IRFs.
+
+# La funcion graficar_grilla_irf() calcula el objeto irf() una sola vez y luego
+# crea cada panel usando funciones auxiliares.
+
+# IRF de las variables del sistema ante distintos choques exogenos.
+irf_ortog_vecm = graficar_grilla_irf(
+    VEC_const_fit,
+    variables,
+    pasos_adelante,
+    ortog=True,
+    int_conf=int_conf_irf,
+    prefijo_titulo="Impulso ortogonal",
+    semilla=semilla_irf,
+    runs=repeticiones_bootstrap_irf,
+)
 
-# ===========================
-# 1. 2 Modelo VAR en niveles
-# ===========================
+# Grilla de OIRF: columnas = impulsos; filas = respuestas.
+print(irf_ortog_vecm["objeto_irf"].orth_irfs)
+mostrar_graficas()
+
+# Nota: Dado que por el orden de las variables que escogimos, primero Brent y
+#       luego WTI, la variable mas exogena es Brent y la mas endogena es WTI.
+#       En este orden, luego de hacer la descomposicion de Cholesky y trabajar
+#       con IRFs ortogonalizadas, un choque estructural en el precio del Brent
+#       afecta tanto al precio del Brent como al precio del WTI, mientras que un
+#       choque estructural en el precio del WTI no tiene ningun efecto en el
+#       tiempo sobre el precio del Brent y su efecto sobre si mismo se disipa
+#       hacia cero en el largo plazo. Note que se llegan a estas conclusiones
+#       por el orden escogido de las variables, donde se asume que la variable
+#       mas exogena es el precio del Brent y la mas endogena es el precio del
+#       WTI.
+
+
+# %% ===
+# 8. Que pasa si se cambia el orden de las variables en el VECM? ====
+# ===
+
+# Nota: Recuerde que el orden de las variables que se usa para construir la
+#       matriz de series de tiempo Y importa, dado que la primera columna de la
+#       matriz esta asociada a la variable mas exogena, mientras que la ultima
+#       columna esta asociada a la variable mas endogena. Esto es importante a
+#       la hora de realizar la descomposicion de Cholesky, dado que la
+#       descomposicion de Cholesky tiene en cuenta ese orden, y por ende las
+#       funciones impulso-respuesta ortogonalizadas dependen fundamentalmente del
+#       orden que se escoja para las variables.
+
+# En esta seccion veremos que pasa si se cambia el orden de las columnas de la
+# matriz de series de tiempo. En este caso, la llamaremos Y_alt.
+
+variables_alt = ["P.WTI", "P.Brent"]
+Y_alt = Y[variables_alt]
+Y_alt_modelo = Y_alt.reset_index(drop=True)
 
-# Posteriormente, estimaremos un VAR en niveles para determinar el número rezagos del VECM
+# Se realizara de nuevo la metodologia de Johansen completa que se realizo
+# previamente, pero esta vez con las variables intercambiadas.
 
-# Ojo: Se analizaran los criterios de información sobre el VAR en niveles 
+# Se estima un VAR(3), pero con las variables intercambiadas de orden.
+modelo_petroleo_alt = VAR(Y_alt_modelo)
+VAR3_alt = modelo_petroleo_alt.fit(p_var, trend="c")
+print(VAR3_alt.summary())
 
-# Se va a construir la matriz con las series
+# Test de Ljung-Box / Portmanteau
 
+# No autocorrelacion serial ===
 
-Y = pd.DataFrame({"Brent": Brent,"WTI": WTI})
-Y.head()
+P_12_alt = VAR3_alt.test_whiteness(nlags=12, adjusted=False)
+print(P_12_alt.summary())  # No rechazo
 
-#Guardamos el modelo VAR para luego determinar el número de rezagos del VECM 
-modelo = VAR(Y)
+P_16_alt = VAR3_alt.test_whiteness(nlags=16, adjusted=False)
+print(P_16_alt.summary())  # No rechazo
 
-#Modelo VAR con tendencia y constante
-lag_order_ct = modelo.select_order(6, trend="ct");print(lag_order_ct.summary())
-var_both = modelo.fit(2, trend="ct");print(var_both.summary())
+P_20_alt = VAR3_alt.test_whiteness(nlags=20, adjusted=False)
+print(P_20_alt.summary())  # No rechazo
 
+# Nota: El supuesto de no correlacion serial en los residuales, el mas
+#       importante, se sigue cumpliendo.
 
-#Modelo VAR con constante
-lag_order_c = modelo.select_order(6, trend="c");print(lag_order_c.summary())
-var_const = modelo.fit(2, trend="c");print(var_const.summary())
 
+# %% Prueba de Johansen con orden alternativo ----
 
-#Modelo VAR sin tendencia ni constante
-lag_order_n = modelo.select_order(6, trend="n");print(lag_order_n.summary())
-var_none = modelo.fit(2, trend="n");print(var_none.summary())
-
-
-
-# Elegimos VAR(2) en niveles 
-
- # c = constante
-VAR2 = modelo.fit(2, trend="c")
-print(VAR2.summary())
-
-
-#Analicemos los residuales del VAR(2)
-
-residuales = VAR2.resid
-
-# Dada que es una serie mensual, 
-# analicemos su comportamiento en puntos críticos.
-
-
-#Veamos la prueba Lyung_box 
-acorr_ljungbox(residuales["Brent"], lags=[12], return_df=True)
-acorr_ljungbox(residuales["WTI"], lags=[12], return_df=True)
-
-acorr_ljungbox(residuales["Brent"], lags=[24], return_df=True)
-acorr_ljungbox(residuales["WTI"], lags=[24], return_df=True)
-
-acorr_ljungbox(residuales["Brent"], lags=[36], return_df=True)
-acorr_ljungbox(residuales["WTI"], lags=[36], return_df=True)
-
-#veamos la prueba Portmaneu
-
-P_12=VAR2.test_whiteness(nlags=12);print(P_12.summary())
-P_24=VAR2.test_whiteness(nlags=24);print(P_24.summary())
-P_36=VAR2.test_whiteness(nlags=36);print(P_36.summary())
-
-# A medida que se alejan los periodos, se cumple el supuesto.
-# Efecto desvanecimiento. Es normal que ocurra esto, por lo que en general, 
-# validaremos el cumplimiento del supuesto.
-
-
-#~~~ Graficamos los residuales ~~~#
-
-for col in residuales.columns:
-    fig, axes = plt.subplots(3, 2, figsize=(12, 6))
-    fig.suptitle(f"Diagnóstico de residuales — {col}", fontsize=13)
-    residuales[col].plot(ax=axes[0, 0], title="Residuales", color="steelblue", linewidth=0.8)
-    axes[0, 0].axhline(0, color="red", linewidth=0.8, linestyle="--")
-    axes[0, 0].spines[["top", "right"]].set_visible(False)
-    axes[0, 1].hist(residuales[col], bins=30, color="steelblue", edgecolor="white")
-    axes[0, 1].set_title("Distribución")
-    axes[0, 1].spines[["top", "right"]].set_visible(False)
-    plot_acf(residuales[col],  lags=20, ax=axes[1, 0], title="ACF residuales")
-    plot_pacf(residuales[col], lags=20, ax=axes[1, 1], title="PACF residuales")
-    plot_acf(residuales[col]**2,  lags=20, ax=axes[2, 0], title="ACF residuales al cuadrado")
-    plot_pacf(residuales[col]**2, lags=20, ax=axes[2, 1], title="PACF residuales al cuadrado")
-    plt.tight_layout()
-    plt.show()
-
-#Se ven bien comportados, excepto por heterocedasticidad
-
-# ===========================================
-# 2. Determinación del rango de la matriz Pi
-# ===========================================
-
-#Lo haremos mediante la funcion coint_johansen de la libreria statsmodels,
-#  la cual nos permite obtener los estadísticos de la traza y 
-# del valor propio máximo, así como sus respectivos valores críticos.
-
-# ======================================
-# 2.1 Test de Johansen - Sin intercepto 
-# ======================================
-
-#ecdet="none"-> det_order=-1
-#ecdet="const"-> det_order=0
-#ecdet="trend"-> det_order=1
-
-#k_ar_diff = p - 1
-
-johansen_test_none = coint_johansen(Y, det_order=-1, k_ar_diff=1)
-
-#~~ Criterio del valor propio máximo ~~#
-
-# Generalmente es la prueba preferida y la  más robusta. 
-# El procedimiento que se analiza es:
-# H0: r=0 vs H1: r=1, luego H0: r=1 vs H1: r=2, y así sucesivamente.
-
-eigen_table_none = pd.DataFrame({
-    "r": ["r = 0", "r ≤ 1"],
-    "Eigen Statistic": johansen_test_none.lr2,
-    "CV 90%": johansen_test_none.cvm[:,0],
-    "CV 95%": johansen_test_none.cvm[:,1],
-    "CV 99%": johansen_test_none.cvm[:,2]
-})
-
-print(eigen_table_none)
-
-
-#~~ Criterio de la traza ~~#
-
-# Es un procedimiento secuencial en donde se contrasta
-# H0: r=0 vs H1: r>=1, luego H0: r<=1 vs H1: r>1, y así sucesivamente. 
-trace_table_none = pd.DataFrame({
-    "r": ["r = 0", "r ≤ 1"],
-    "Trace Statistic": johansen_test_none.lr1,
-    "CV 90%": johansen_test_none.cvt[:,0],
-    "CV 95%": johansen_test_none.cvt[:,1],
-    "CV 99%": johansen_test_none.cvt[:,2]
-})
-
-print(trace_table_none)
-
-
-
-# ======================================
-# 2.2 Test de Johansen - Con intercepto 
-# ======================================
-
-johansen_test_const = coint_johansen(Y, det_order=0, k_ar_diff=1)
-
-
-#~~ Criterio del valor propio máximo ~~#
-
-eigen_table_const = pd.DataFrame({
-    "r": ["r = 0", "r ≤ 1"],
-    "Eigen Statistic": johansen_test_const.lr2,
-    "CV 90%": johansen_test_const.cvm[:,0],
-    "CV 95%": johansen_test_const.cvm[:,1],
-    "CV 99%": johansen_test_const.cvm[:,2]
-})
-
-print(eigen_table_const)
-
-
-#~~ Criterio de la traza ~~#
-
-trace_table_const = pd.DataFrame({
-    "r": ["r = 0", "r ≤ 1"],
-    "Trace Statistic": johansen_test.lr1,
-    "CV 90%": johansen_test.cvt[:,0],
-    "CV 95%": johansen_test_const.cvt[:,1],
-    "CV 99%": johansen_test_const.cvt[:,2]
-})
-
-print(trace_table_const)
-
-
-# ======================================
-# 3 Estimaciones de los modelos vistos
-# ======================================
-
-#Especificaciones:
-#"n" - no deterministic terms
-#"co" - constant outside the cointegration relation
-#"ci" - constant within the cointegration relation
-#"lo" - linear trend outside the cointegration relation
-#"li" - linear trend within the cointegration relation
-
-
-#~~Sin constante~~~#
-
-vecm_none = VECM(Y, k_ar_diff=1, coint_rank=1, deterministic="n")
-vecm_none_fit = vecm_none.fit()
-print(vecm_none_fit.summary())
-
-#Vector de cointegración (beta) y velocidad de ajuste (alpha)
-
-#Beta
-print("\nVector de cointegración (beta):");print(vecm_none_fit.beta)
-
-#Alpha
-print("\nVelocidades de ajuste (alpha):");print(vecm_none_fit.alpha)
-
-
-
-#~~~ Con constante~~~#
-
-vecm_const = VECM(Y, k_ar_diff=1, coint_rank=1, deterministic="ci")
-vecm_const_fit = vecm_const.fit()
-print(vecm_const_fit.summary())
-
-
-#Beta
-print("\nVector de cointegración (beta):");print(vecm_const_fit.beta)
-
-#Constante de cointegración
-print(vecm_const_fit.det_coef_coint)
-
-#Alpha
-print("\nVelocidades de ajuste (alpha):");print(vecm_const_fit.alpha)
-
-
-#Veamos el modelo con tendencia lineal
-
-vecm_trend = VECM(Y, k_ar_diff=1, coint_rank=1, deterministic="lo")
-
-vecm_trend_fit = vecm_trend.fit()
-
-print(vecm_trend_fit.summary())
-
-#Vemos que no es significativo el término de tendencia lineal, 
-# por lo que nos quedamos con el modelo con constante.
-
-
-# =============================================
-# 3 Validación de supuestos y usos del modelo
-# =============================================
-
-#~~~Autocorrelacion- Portamanteu Test~~~#
-
-P_12=vecm_const_fit.test_whiteness(nlags=12);print(P_12.summary())
-
-P_24=vecm_const_fit.test_whiteness(nlags=24); print(P_24.summary())
-
-P_36=vecm_const_fit.test_whiteness(nlags=36); print(P_36.summary())
-
-
-
-#Homocedasticidad
-resid = vecm_const_fit.resid
-
-print("===== ARCH TEST (12 lags) =====")
-for i in range(resid.shape[1]):
-    arch = het_arch(resid[:, i], nlags=12)
-    print(f"Ecuación {i+1}")
-    print("LM stat:", arch[0])
-    print("p-value:", arch[1])
-    print()
-
-print("===== ARCH TEST (24 lags) =====")
-for i in range(resid.shape[1]):
-    arch = het_arch(resid[:, i], nlags=24)
-    print(f"Ecuación {i+1}")
-    print("LM stat:", arch[0])
-    print("p-value:", arch[1])
-    print()
-
-
-#Normalidad
-vecm_none_fit.test_normality().summary()
-
-
-# =============================================
-# 4.1 Pronostico del VECM
-# =============================================
-
-forecast = vecm_const_fit.predict(steps=12)
-print(forecast)
-
-forecast_df = pd.DataFrame(forecast, columns=Y.columns)
-forecast_df.head()
-
-
-#~~~ Grafica del pronóstico ~~~#
-
-# Últimos datos observados
-Y_values = Y.values
-n_obs = Y_values.shape[0]
-
-# Pronóstico
-steps = 12
-forecast, lower, upper = vecm_const_fit.predict(steps=steps, alpha=0.05)
-
-# Eje de tiempo
-t = np.arange(n_obs)
-t_forecast = np.arange(n_obs, n_obs + steps)
-nombres = ["Petróleo Brent", "Petróleo WTI"]
-# Graficar cada variable
-for i in range(Y_values.shape[1]): 
-    plt.figure()
-    # Histórico
-    plt.plot(t, Y_values[:, i], label="Histórico")
-    # Pronóstico
-    plt.plot(t_forecast, forecast[:, i], linestyle="--", label="Pronóstico")
-    # Intervalos
-    plt.fill_between(t_forecast, lower[:, i], upper[:, i], alpha=0.5)
-    plt.title(f"Pronóstico VECM - {nombres[i]}")
-    plt.xlabel("Tiempo")
-    plt.ylabel("Precio")
-    plt.legend()
-    plt.show()
-
-
-# =============================================
-# 4.2 Funciones impulso respuesta
-# =============================================
-
-irf = vecm_none_fit.irf(12)
-irf.plot(orth=True)
-plt.show()
-
-# =============================================
-# 5. Un comportamiento llamativo
-# =============================================
-
-Y2 = data[["WTI", "Brent"]]
-Y2.head()
-
-modelo2 = VAR(Y2)
-VAR_2 = modelo2.fit(2)
-print(VAR2.summary())
-
-
-
- #Reparametrización del modelo VECM 
-vecm_const2 = VECM(Y2, k_ar_diff=1, coint_rank=1, deterministic="co")
-vecm2_fit = vecm_const2.fit()
-print(vecm_fit.summary())
-
-
-#Veamos las funciones impulso respuesta
-
-irf = vecm2_fit.irf(12)
-irf.plot(orth=True)
-plt.show()
-
-# Los impuslo respuesta cambian significativamente. ¿La noción de esto? Depende
-# del contexto económico.
-
-# Lo que muestra la conclusión teórica es que la variable que se coloca primero 
-# es la más exogena de las dos. Por lo que, cuando construyan su VAR, coloquen 
-# la más exogena arriba.
-
-
-#============================================
-#~~~~~~~~~FIN DEL CODIGO ;) ~~~~~~~~~~~~~~~~
-#============================================
+# Se usa de nuevo coint_johansen para realizar la prueba de Johansen y
+# determinar el rango de la matriz Pi.
+
+# Para ello usaremos las siguientes especificaciones del test:
+#  - tipo = "eigen": Criterio del valor propio maximo.
+#  - det_order = 0: Constante en el vector de cointegracion.
+
+# Al tener el VECM solo dos variables, el procedimiento secuencial a realizar es:
+
+# H0: r = 0 vs H1: r = 1,
+# luego H0: r = 1 vs H1: r = 2.
+# Aqui p = 2 variables y K = 3 rezagos, pues se estimo un VAR(3).
+
+# Criterio del valor propio maximo y constante.
+johansen_test_const_alt = coint_johansen(
+    Y_alt_modelo,
+    det_order=0,
+    k_ar_diff=k_ar_diff,
+)
+
+eigen_table_const_alt = imprimir_tabla_johansen(
+    johansen_test_const_alt,
+    tipo="eigen",
+    titulo="Johansen con constante y orden alternativo",
+)  # Se mantiene la conclusion
+
+# Note que primero se rechaza la hipotesis nula r = 0, pero luego no se rechaza
+# la hipotesis nula r = 1, por lo que se concluye que existe una relacion de
+# cointegracion y las series estan cointegradas.
+
+
+# %% Estimacion del modelo VEC con orden alternativo ----
+
+# La clase VECM permite estimar el modelo VEC en Python.
+VEC_const_alt = VECM(
+    Y_alt_modelo,
+    k_ar_diff=k_ar_diff,
+    coint_rank=1,
+    deterministic="ci",
+)
+VEC_const_alt_fit = VEC_const_alt.fit()
+print(VEC_const_alt_fit.summary())
+
+# Con esta funcion auxiliar obtenemos el vector de cointegracion normalizado.
+matrices_vecm_const_alt = extraer_matrices_vecm(
+    VEC_const_alt_fit,
+    variables=variables_alt,
+)
+
+print("\nVector de cointegracion normalizado (beta), orden alternativo:")
+print(matrices_vecm_const_alt["beta"])
+
+# Con esta funcion auxiliar obtenemos los coeficientes de velocidad de ajuste.
+print("\nVelocidades de ajuste (alpha), orden alternativo:")
+print(matrices_vecm_const_alt["alpha"])
+
+
+# %% Reparametrizacion del modelo VEC en un modelo VAR ----
+
+# En Python no se crea un objeto tipo vec2var como en R; la reparametrizacion en
+# niveles queda disponible en VEC_const_alt_fit.var_rep y los diagnosticos se
+# aplican directamente sobre el resultado del VECM.
+
+P_12_V_alt = VEC_const_alt_fit.test_whiteness(nlags=12)
+print(P_12_V_alt.summary())
+
+P_24_V_alt = VEC_const_alt_fit.test_whiteness(nlags=24)
+print(P_24_V_alt.summary())
+
+P_36_V_alt = VEC_const_alt_fit.test_whiteness(nlags=36)
+print(P_36_V_alt.summary())
+
+# Nota: Se cumple el supuesto de no correlacion serial en los residuales, en el
+#       VAR reparametrizado, que es el supuesto mas importante.
+
+
+# %% Funciones impulso-respuesta ortogonalizadas con orden alternativo ----
+
+# Veamos que ocurre con las OIRF al cambiar el orden de las variables del modelo
+# VEC.
+
+irf_ortog_vecm_alt = graficar_grilla_irf(
+    VEC_const_alt_fit,
+    variables_alt,
+    pasos_adelante,
+    ortog=True,
+    int_conf=int_conf_irf,
+    prefijo_titulo="Impulso ortogonal",
+    semilla=semilla_irf,
+    runs=repeticiones_bootstrap_irf,
+)
+
+# Grilla de OIRF: columnas = impulsos; filas = respuestas.
+mostrar_graficas()
+
+# Nota: Las OIRF cambian sustancialmente. Note que, si se asume que P.WTI ahora
+#       es la variable mas exogena, entonces ahora, a diferencia de lo que
+#       ocurria anteriormente, los choques estructurales del P.WTI si son
+#       significativos y persistentes, y ademas los choques estructurales del
+#       P.Brent continuan siendo significativos y persistentes. Note que solo
+#       con cambiar el orden de las variables, el choque estructural del P.WTI
+#       pasa de no ser casi significativo y disiparse, a ser significativo y
+#       persistente. Por lo tanto, se concluye que el orden en que se escojan
+#       las variables en el modelo VEC, al igual que en el modelo VAR, no es
+#       trivial. Es fundamental escoger dicho orden de exogeneidad por teoria
+#       economica o por pruebas estadisticas, porque dada la logica de la
+#       descomposicion de Cholesky, al escoger un orden diferente de las
+#       variables del modelo se pueden llegar a conclusiones muy distintas.
+
+# Nota: Lo anterior muestra algunas de las limitaciones de la descomposicion de
+#       Cholesky como estrategia de identificacion de choques estructurales.
+#       Claramente, el orden en que se escojan las variables afecta la
+#       interpretacion economica y, sobre todo, los resultados de politica. En
+#       muchos casos, el orden de exogeneidad entre las variables no es claro o
+#       simplemente no existe. Para superar ese problema en la identificacion de
+#       choques estructurales usando descomposicion de Cholesky, existen otras
+#       estrategias de identificacion, como un S-VECM (Structural VECM), donde a
+#       partir de una matriz de restricciones se pueden imponer restricciones
+#       mas sensibles para la identificacion de choques estructurales. En la
+#       practica, este tipo de identificacion suele ser mas adecuado que usar la
+#       descomposicion de Cholesky de forma mecanica.
+
+
+# %%
+# ============================================
+# ~~~~~~~~~ FIN DEL CODIGO ;) ~~~~~~~~~~~~~~~~
+# ============================================

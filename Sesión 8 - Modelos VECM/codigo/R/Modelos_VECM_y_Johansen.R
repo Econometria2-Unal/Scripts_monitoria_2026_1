@@ -17,10 +17,10 @@
 #' 4. Identificacion del orden de integracion de las series
 #' 5. Modelo VAR en niveles
 #' 6. Determinacion del rango de la matriz Pi
-#'  6.1. Test de Johansen - Sin intercepto
-#'  6.2. Test de Johansen - Con intercepto
-#'  6.3. Estimaciones de los modelos vistos
-#'  6.4. Test para determinar tendencia lineal en el modelo
+#'  6.1. Test de Johansen - Sin constante en el vector de cointegración
+#'  6.2. Test de Johansen - Con constante en el vector de cointegración
+#'  6.3. Estimación del VECM(2) de acuerdo a los resultados del test de Johansen
+#'  6.4. Test para determinar tendencia lineal en la relación de cointegración con "lttest"
 #' 7. Validacion de supuestos y usos del modelo
 #'  7.1. Reparametrizacion del VECM como un VAR en niveles
 #'  7.2. Validacion de supuestos de VECM como VAR
@@ -148,13 +148,15 @@ print(g_precios_petroleo)
 
 ## Etapa 1: Verificacion preliminar de las variables a trabajar (orden de
 #            integracion y graficas) e identificacion del numero de rezagos del
-#            VECM mediante criterios de informacion sobre el VAR en niveles.
+#            VECM mediante criterios de informacion sobre el VAR en niveles y 
+#            seleccionando el número de reazagos tal que los errores sean ruido blanco. 
 ## Etapa 2: Determinacion del rango de la matriz Pi, es decir, del numero de
-#            relaciones de cointegracion, y estimacion del VECM.
+#            relaciones de cointegracion, y estimacion del modelo apropiado
+#            dependiendo del rango de la matriz Pi.
 ## Etapa 3: Analisis de la matriz beta, que contiene el vector de cointegracion,
 #            y de la matriz alpha, que contiene los parametros de velocidad de
 #            ajuste.
-## Etapa 4: Validacion de supuestos y usos del modelo.
+## Etapa 4: Validacion de supuestos y usos del modelo (pronósticos e IRF).
 
 
 # ===
@@ -166,35 +168,35 @@ print(g_precios_petroleo)
 
 # Referencia Brent ----
 
-adf_brent_tendencia = urca::ur.df(P.Brent, lags = 12, type = "trend")
+adf_brent_tendencia = ur.df(P.Brent, lags = 12, type = "trend")
 summary(adf_brent_tendencia) # Tendencia no significativa
 
-adf_brent_deriva = urca::ur.df(P.Brent, lags = 12, type = "drift")
+adf_brent_deriva = ur.df(P.Brent, lags = 12, type = "drift")
 summary(adf_brent_deriva) # Deriva no significativa
 
-adf_brent_none = urca::ur.df(P.Brent, lags = 12, type = "none")
+adf_brent_none = ur.df(P.Brent, lags = 12, type = "none")
 summary(adf_brent_none) # Serie no estacionaria
 
 
 # Referencia WTI ----
 
-adf_wti_tendencia = urca::ur.df(P.WTI, lags = 12, type = "trend")
+adf_wti_tendencia = ur.df(P.WTI, lags = 12, type = "trend")
 summary(adf_wti_tendencia) # Tendencia no significativa
 
-adf_wti_deriva = urca::ur.df(P.WTI, lags = 12, type = "drift")
+adf_wti_deriva = ur.df(P.WTI, lags = 12, type = "drift")
 summary(adf_wti_deriva) # Deriva no significativa
 
-adf_wti_none = urca::ur.df(P.WTI, lags = 12, type = "none")
+adf_wti_none = ur.df(P.WTI, lags = 12, type = "none")
 summary(adf_wti_none) # Serie no estacionaria
 
 
 # Aplicamos diferenciacion ----
 
-adf_d_brent = urca::ur.df(diff(P.Brent), lags = 12, type = "none")
-summary(adf_d_brent) # I(1)
+adf_d_brent = ur.df(diff(P.Brent), lags = 12, type = "none")
+summary(adf_d_brent) # La diferenciación de P.Brent es I(0), por lo que P.Brent en niveles es I(1)
 
-adf_d_wti = urca::ur.df(diff(P.WTI), lags = 12, type = "none")
-summary(adf_d_wti) # I(1)
+adf_d_wti = ur.df(diff(P.WTI), lags = 12, type = "none")
+summary(adf_d_wti) # La diferenciación de P.WTI es I(0), por lo que P.WTI en niveles es I(1)
 
 
 # ===
@@ -204,49 +206,65 @@ summary(adf_d_wti) # I(1)
 # Posteriormente, estimaremos un VAR en niveles para determinar el numero de
 # rezagos del VECM.
 
-# Ojo: se analizaran los criterios de informacion sobre el VAR en niveles.
+# Nota: Se analizaran los criterios de informacion sobre el VAR en niveles.
 
 # Seleccion de rezagos para un VAR con tendencia e intercepto.
-seleccion_rezagos_both = vars::VARselect(
+seleccion_rezagos_both = VARselect(
   Y, lag.max = 6, type = "both", season = NULL
 )
 seleccion_rezagos_both
 
-VAR2_both = vars::VAR(Y, p = 2, type = "both", season = NULL)
-summary(VAR2_both) # Tendencia no significativa
+# Se trabaja con p = 3 porque AIC/FPE sugieren este rezago 
+p_var = 3
+
+VAR3_both = vars::VAR(Y, p = p_var, type = "both", season = NULL)
+summary(VAR3_both) # Tendencia no significativa
 
 # Seleccion de rezagos para un VAR con solo intercepto.
-seleccion_rezagos_const = vars::VARselect(
+seleccion_rezagos_const = VARselect(
   Y, lag.max = 6, type = "const", season = NULL
 )
 seleccion_rezagos_const
 
-VAR2_const = vars::VAR(Y, p = 2, type = "const", season = NULL)
-summary(VAR2_const) # Intercepto significativo
+VAR3_const = vars::VAR(Y, p = p_var, type = "const", season = NULL)
+summary(VAR3_const) # Intercepto significativo
 
-# No tiene sentido analizar sin constante ya que este ultimo modelo resulta no
-# significativo.
+# Dado que al estimar el VAR con constante,el intercepto en éste modelo 
+# resultó significativo, decidimos estimar un VAR con constante.
 
-# Elegimos VAR(2) en niveles.
-VAR2 = VAR2_const
+# Elegimos VAR(3) en niveles.
+VAR3 = VAR3_const
+
+# Note que como se estimo un VAR(3), su reparamterización como un VECM será un 
+# VECM(2). Además, dicha reparametrización siempre se podrá hacer independidente de
+# si las variables del VAR son I(0) o I(1). 
+
+# Nota: Los residuales del modelo VAR en niveles deben ser ruido blanco, independientemente
+#       de si las variables del VAR en niveles son I(0) o son I(1). Si se escogió
+#       el número adecuado de rezagos en el VAR, siempre se podrá garantizar que esos
+#       residuales serán ruido blanco. 
+
+# Nota: También recuerde que en teoría, los errores del VAR en niveles deben ser los
+#       mismos errores que los del VECM (Nota de la nota: recuerde que los errores son teóricos
+#       y los residuales son una aproximación a los errores, pero no son los errores). 
 
 # Vamos a analizar el comportamiento de los residuales. Dado que es una serie
 # mensual, analicemos su comportamiento en puntos criticos.
 
-P.12 = vars::serial.test(VAR2, lags.pt = 12, type = "PT.asymptotic"); P.12
-# Rechazo, se viola el supuesto
+# No autocorrelación serial ===
 
-P.24 = vars::serial.test(VAR2, lags.pt = 24, type = "PT.asymptotic"); P.24
+P.12 = vars::serial.test(VAR3, lags.pt = 12, type = "PT.asymptotic"); P.12
 # No rechazo, se cumple el supuesto
 
-P.36 = vars::serial.test(VAR2, lags.pt = 36, type = "PT.asymptotic"); P.36
+P.16 = vars::serial.test(VAR3, lags.pt = 16, type = "PT.asymptotic"); P.16
 # No rechazo, se cumple el supuesto
 
-# A medida que se alejan los periodos, se cumple el supuesto.
-# Efecto desvanecimiento. Es normal que ocurra esto, por lo que en general,
-# validaremos el cumplimiento del supuesto.
+P.20 = vars::serial.test(VAR3, lags.pt = 20, type = "PT.asymptotic"); P.20
+# No rechazo, se cumple el supuesto
 
-# Graficamos los residuales para 20 lags:
+# Validación grafica de otros supuestos ===
+
+# Graficamos los residuales para 12 lags:
 
 x11()
 plot(P.12, names = "P.Brent") # Bien comportados salvo por heterocedasticidad
@@ -255,76 +273,139 @@ x11()
 plot(P.12, names = "P.WTI") # Bien comportados salvo por heterocedasticidad
 
 
+# Nota: Lo más importante para seguir con el procedimiento de la metodología de Johansen, es que
+#       los residuales no tengan correlación serial. Puede que no sean exactamente ruido blanco, 
+#       si e.g. tienen heterocedasticidad, pero lo fundamental es que los residuales no tengan
+#       correlación serial, ese es el supuesto clave a validar.
+
 # ===
 # 6. Determinacion del rango de la matriz Pi ====
 # ===
 
-# La funcion ca.jo nos permitira analizar el test de Johansen.
+# La funcion ca.jo del paquete urca permite realizar el test de Johansen en R.
 
 # Argumentos del test de Johansen
 
 # Para revisar todos los argumentos del test de Johansen se puede usar: ?ca.jo
 args(urca::ca.jo)
 
+# Nota: Existen 3 versiones diferentes del test de cointegración de Johansen 
+#       1) ecdet = "none": Relación de cointegración sin constante
+#                           (P.Brent - beta * P.WTI = 0 --> P.Brent = beta * P.WTI)  
+#       2) ecdet = "const": Relación de cointegración con constante 
+#                           (P.Brent - beta * P.WTI + c = 0 --> P.Brent = beta * P.WTI - c)  
+#       3) ecdet = "trend": Relación de cointegración con tendencia lineal (beta' * Y_t + c + delta * t = 0)
+#                           (P.Brent - beta * P.WTI + c + delta * t = 0 --> P.Brent = beta * P.WTI - c - delta * t)
+
+# Donde "beta" es el coeficiente de cointegración que aparece en el vector de cointegración
+
+# Nota: Para el curso, siempre trabajaremos con la especificación "spec = transitory"
+#       en el comando ca.jo, que genera un representación del modelo VEC equivalente a 
+#       la que vemos teóricamente en el curso.
+#       La especificación "spec = longrun" es otra manera de representar el modelo VAR, 
+#       pero esa representación no la trabajamos en el curso 
+
+# Nota: El argumento K del test de Johansen, determinar el orden del VAR en niveles que estimo
+#       previamente. E.g., en nuestro caso particular, estimamos un VAR(3), entonces K = 3 cuando
+#       se usa el comando ca.jo, a pesar de que la reparametrización de ese VAR(3) es un VECM(2)
 
 # ===
-# 6.1. Test de Johansen - Sin intercepto ====
+# 6.1. Test de Johansen - Sin constante en el vector de cointegración ====
 # ===
+
+# Nota: Estamos en el caso: ecdet = "none": Relación de cointegración sin constante
+#                           (P.Brent - beta * P.WTI = 0 --> P.Brent = beta * P.WTI)  
+
+# Nota: Hay dos manera de hacer el test de Johansen: 
+#       1. Criterio del valor propio máximo
+#       2. Criterio de la traza
 
 # Criterio del valor propio maximo ----
 
 # Generalmente es la prueba preferida y la mas robusta.
-# El procedimiento que se analiza es:
 
-# H0: r = 0 vs H1: r = 1, luego H0: r = 1 vs H1: r = 2, y asi
-# sucesivamente. Aqui k = 2.
+# Dado que solo hay dos variables, se realiza el siguiente procedimiento secuencial
+# el procedimiento que se analiza es:
+
+# H0: r = 0 vs H1: r >= 1, 
+# luego H0: r = 1 vs H1: r = 2. 
+# Aquí p = 2 variables y K = 3 rezagos (se estimo un VAR(3)).
 
 eigen_none = urca::ca.jo(
-  Y, ecdet = "none", type = "eigen", K = 2, spec = "transitory"
+  Y, ecdet = "none", type = "eigen", K = p_var, spec = "transitory"
 )
-summary(eigen_none) # Al 5% de confianza las series estan cointegradas
 
+# Note que primero se rechaza la hipótesis nula r = 0, pero luego no se rechaza
+# la hipotesis nula r = 1, por lo que se concluye que existe una relación de
+# cointegración y las series están cointegradas. 
+summary(eigen_none) 
+
+# Nota: Note que el orden del VECM no me determinará cuántas pruebas secuenciales
+#       debo realizar en el test de Johansen, eso solo va a estar determinado por
+#       el número de variables que tengo el VECM
 
 # Criterio de la traza ----
 
-# Es un procedimiento secuencial en donde se contrasta:
-# H0: r = 0 vs H1: r >= 1, luego H0: r <= 1 vs H1: r > 1, y asi
-# sucesivamente. Aqui k = 2.
+# Al tener el VECM solo dos variables, el procedimiento secuencial a realizar es: 
+
+# H0: r = 0 vs H1: r >= 1, 
+# H0: r = 1 vs H1: r = 1, y asi
+# Aquí p = 2 variables y K = 3 rezagos (se estimo un VAR(3)).
 
 trace_none = urca::ca.jo(
-  Y, ecdet = "none", type = "trace", K = 2, spec = "transitory"
+  Y, ecdet = "none", type = "trace", K = p_var, spec = "transitory"
 )
-summary(trace_none) # Al 5% de confianza las series estan cointegradas
+
+# Note que primero se rechaza la hipótesis nula r = 0, pero luego no se rechaza
+# la hipotesis nula r = 1, por lo que se concluye que existe una relación de
+# cointegración y las series están cointegradas. 
+summary(trace_none) 
 
 
 # ===
-# 6.2. Test de Johansen - Con intercepto ====
+# 6.2. Test de Johansen - Con constante en el vector de cointegración ====
+# ===
+
+# Nota: Estamos en el caso: ecdet = "const": Relación de cointegración con constante 
+#                           (P.Brent - beta * P.WTI + c = 0 --> P.Brent = beta * P.WTI - c)  
+
+# ===
+# Nota: Este es el el caso más común, entonces por lo general trabajaremos con 
+#       ecdet = "const", y diremos que la relación de cointegración incluye una constante! 
 # ===
 
 # Criterio del valor propio maximo ----
 
 eigen_const = urca::ca.jo(
-  Y, ecdet = "const", type = "eigen", K = 2, spec = "transitory"
+  Y, ecdet = "const", type = "eigen", K = p_var, spec = "transitory"
 )
-summary(eigen_const) # Al 5% de confianza las series estan cointegradas
+
+# Note que primero se rechaza la hipótesis nula r = 0, pero luego no se rechaza
+# la hipotesis nula r = 1, por lo que se concluye que existe una relación de
+# cointegración y las series están cointegradas.
+summary(eigen_const) 
 
 
 # Criterio de la traza ----
 
 trace_const = urca::ca.jo(
-  Y, ecdet = "const", type = "trace", K = 2, spec = "transitory"
+  Y, ecdet = "const", type = "trace", K = p_var, spec = "transitory"
 )
-summary(trace_const) # Al 5% de confianza las series estan cointegradas
+
+# Note que primero se rechaza la hipótesis nula r = 0, pero luego no se rechaza
+# la hipotesis nula r = 1, por lo que se concluye que existe una relación de
+# cointegración y las series están cointegradas.
+summary(trace_const) 
 
 
 # ===
-# 6.3. Estimaciones de los modelos vistos ====
+# 6.3. Estimación del VECM(2) de acuerdo a los resultados del test de Johansen ====
 # ===
 
 # Sin constante ----
 
-# La funcion cajorls permite estimar el modelo VEC.
-VEC_none = urca::cajorls(eigen_none, r = 1)
+# La funcion cajorls del paquete urca permite estimar el modelo VEC.
+VEC_none = urca::cajorls(eigen_none, r = 1) # r=1 para indicar que hay una relación de cointegración
 VEC_none
 
 # Con esta funcion obtenemos el vector de cointegracion normalizado.
@@ -348,21 +429,24 @@ coefA(VEC_const)
 
 
 # ===
-# 6.4. Test para determinar tendencia lineal en el modelo ====
+# 6.4. Test para determinar tendencia lineal en la relación de cointegración con "lttest" ====
 # ===
 
-# Tenemos la funcion lttest del paquete urca. Para revisar que hace se puede usar:
+# La funcion lttest del paquete urca permite determinar la existencia de una tendencia 
+# lineal determinística en el VAR en niveles asociado a la reparametrización del VECM.
+
+# Para revisar que hace la función se puede usar el siguiente comando:
 # ?lttest
 
-# Es decir:
+# De la documentación lttest indica que:
 
-# H0: No existencia de tendencia lineal.
-# H1: Existencia de tendencia lineal.
+# H0: No existencia de tendencia lineal en el VAR en niveles asociado a la reparametrización del VECM.
+# H1: Existencia de tendencia lineal en el VAR en niveles asociado a la reparametrización del VECM.
 
 urca::lttest(eigen_const, r = 1)
 
 # No rechazo la hipotesis nula, por lo que no se debe incluir tendencia lineal
-# en el modelo.
+# el VAR en niveles asociado a la reparametrización del VECM.
 
 
 # ===
@@ -376,6 +460,10 @@ urca::lttest(eigen_const, r = 1)
 
 # Nota: Dados los resultados de la prueba lttest, se usara el modelo VEC con
 # constante en el vector de cointegracion.
+
+# Nota: Luego de estimar el modelo VECM usando la función cajorls del paquete
+#       urca, se puede reparatremizar el modelo VECM de nuevo como un modelo VAR
+#       usando la funcíón vec2var del paquete vars
 
 VAR.oil = vars::vec2var(eigen_const, r = 1)
 
@@ -398,23 +486,29 @@ class(VAR.oil) # Notar que la clase del objeto ahora es vec2var
 # PT.asymptotic es para muestra grande y "PT.adjusted" es correccion para
 # muestra pequena.
 
-P.12_V = vars::serial.test(VAR.oil, lags.pt = 12, type = "PT.asymptotic"); P.12_V
-P.24_V = vars::serial.test(VAR.oil, lags.pt = 24, type = "PT.asymptotic"); P.24_V
-P.36_V = vars::serial.test(VAR.oil, lags.pt = 36, type = "PT.asymptotic"); P.36_V
+P.12_V = vars::serial.test(VAR.oil, lags.pt = 12, type = "PT.asymptotic"); P.12_V # No rechaza H0
+P.24_V = vars::serial.test(VAR.oil, lags.pt = 24, type = "PT.asymptotic"); P.24_V # No rechaza H0
+P.36_V = vars::serial.test(VAR.oil, lags.pt = 36, type = "PT.asymptotic"); P.36_V # No rechaza H0
 
+# Nota: Se cumple el supuesto de no correlación serial en los residuales 
 
 # Homocedasticidad ----
 
 # Test tipo ARCH multivariado.
-vars::arch.test(VAR.oil, lags.multi = 24, multivariate.only = TRUE)
-vars::arch.test(VAR.oil, lags.multi = 12, multivariate.only = TRUE)
+vars::arch.test(VAR.oil, lags.multi = 24, multivariate.only = TRUE) # Rechaza H0
+vars::arch.test(VAR.oil, lags.multi = 12, multivariate.only = TRUE) # Rechaza H0
 
+# Nota: No se cumple el supuesto de heterocedasticidad en los residuales 
 
 # Normalidad ----
 
 # Test Jarque-Bera multivariado.
-vars::normality.test(VAR.oil)
+vars::normality.test(VAR.oil) # Rechaza H0 
 
+# Nota: No se cumple el supuesto de normalidad en los residuales 
+
+# Nota: Se cumple el supuesto más importante, que es el de no correlación serial
+#       en los residuales del modelo 
 
 # Nota: Como se violan los supuestos de heterocedasticidad y normalidad, hay que
 #       calcular los intervalos de confianza mediante bootstrapping para poder
@@ -429,9 +523,11 @@ vars::normality.test(VAR.oil)
 # Recuerden que debido al incumplimiento de normalidad, los intervalos de
 # confianza deben computarse por bootstrapping.
 
+# Especificaciones del pronóstico
 horizonte_pronostico = 12
 int_conf_pronostico = 0.95
 
+# Pronóstico del modelo VEC
 prono_VECM = predict(
   VAR.oil,
   n.ahead = horizonte_pronostico,
@@ -439,6 +535,7 @@ prono_VECM = predict(
 )
 prono_VECM
 
+# Gráfica del pronóstico del modelo VEC
 g_pronostico_vecm = graficar_pronostico_vecm(prono_VECM) +
   ggtitle("Pronostico VECM reparametrizado") +
   labs(subtitle = "Horizonte: 12 meses")
@@ -455,7 +552,7 @@ print(g_pronostico_vecm)
 pasos_adelante = 0:18
 int_conf_irf = 0.95
 semilla_irf = 202601
-repeticiones_bootstrap_irf = 100
+repeticiones_bootstrap_irf = 100 # Bootstrappings empleados para construir los IC de las IRFs
 
 # La funcion graficar_grilla_irf() calcula el objeto irf() una sola vez y luego
 # crea cada panel con programacion funcional.
@@ -478,42 +575,90 @@ grid.arrange(grobs = irf_ortog_vecm$graficas,
              layout_matrix = matrix(seq_along(irf_ortog_vecm$graficas),
                                     nrow = length(variables), byrow = TRUE))
 
-# Segun esto, los impulsos de WTI no son significativos en las respuestas de
-# Brent ni el mismo WTI.
+# Nota: Dado que por el orden de las variables que escogimos, primero Brent y luego WTI, 
+#       la variable más exógena es Brent y la más endógena es WTI. Vemos que en éste orden, 
+#       luego de hacer la descomposción de Cholesky y trabajar con IRFs ortogonalizadas, 
+#       un choque estructural en el precio el Brent afecta tanto al precio del Brent como al
+#       precio del WTI, mientras que un choque estructural en precio del WTI no tiene ningún
+#       efecto en el tiempo sobre el precio del Brent y que el efecto de un choque estructural
+#       en el precio del WTI sobre si mismo se disipa hacia cero en el largo plazo. 
+#       Note que se llegan a éstas conclusiones
+#       por el orden escogido de las variables, donde se asume que la variable más exógena es
+#       el precio del Brent y la más endógena es el precio del WTI.
 
 
 # ===
 # 8. Qué pasa si se cambia el orden de las variables en el VECM? ====
 # ===
 
-# Cuando creamos el vector de VAR en niveles, fijamos en la primera variable el
-# precio del petroleo Brent. Veamos que sucede si hacemos un modesto cambio.
+# Nota: Recuerde que el orden de las variables que se usa para construir la matriz 
+#       de series de tiempo Y importa, dada que la primera columna de la matriz 
+#       está asociada a la variable más exógena, mientras que la última columna 
+#       está asociada a la variable más endógena. Ésto es importante a la hora de
+#       realizar la descomposición de Cholesky, dada que la descomposición de Cholesky
+#       tiene en cuenta ese orden, y por ende las funciones impulso respuseta ortgonalizadas
+#       dependen fundamentalmente del orden que se escoga de las variables. 
+
+# En ésta sección veremos que pasa si se cambia el orden de las columnas de la matriz de
+# series de tiempo, en éste caso la llamaremos: Y_alt
 
 variables_alt = c("P.WTI", "P.Brent")
 Y_alt = ts.intersect(P.WTI = P.WTI, P.Brent = P.Brent)
 
-# Estimemos de misma forma todo el modelo y veamos hasta donde llegamos con los
-# impulso-respuesta.
+# Se realizará de nuevo la metodología de Johansen de manera completa que se realizó previamente, 
+# pero está vez con las variables intercambiadas
 
-VAR2_alt = vars::VAR(Y_alt, p = 2, type = "const", season = NULL)
+# Se estima un VAR(3), pero con las variables intercambiadas de orden 
+VAR3_alt = vars::VAR(Y_alt, p = p_var, type = "const", season = NULL)
 
-P.12_alt = vars::serial.test(VAR2_alt, lags.pt = 12, type = "PT.asymptotic"); P.12_alt
-P.24_alt = vars::serial.test(VAR2_alt, lags.pt = 24, type = "PT.asymptotic"); P.24_alt
-P.36_alt = vars::serial.test(VAR2_alt, lags.pt = 36, type = "PT.asymptotic"); P.36_alt
+# Test de ljung-box
 
-# Los supuestos no se alteran significativamente.
+# No autocorrelación serial ===
 
+P.12_alt = vars::serial.test(VAR3_alt, lags.pt = 12, type = "PT.asymptotic"); P.12_alt # No rechazo
+P.16_alt = vars::serial.test(VAR3_alt, lags.pt = 16, type = "PT.asymptotic"); P.16_alt # No rechazo
+P.20_alt = vars::serial.test(VAR3_alt, lags.pt = 20, type = "PT.asymptotic"); P.20_alt # No rechazo
 
-# Estimacion VECM ----
+# Nota: El supuesto de no correlación serial en los residuales, el más importante, 
+#       se sigue cumpliendo! 
 
-# Criterio del valor propio maximo y constante.
+# Prueba de Johansen (comando ca.jo) ----
+
+# Se usa de nuevo el comando ca.jo para realizar la prueba de Johansen y determinar
+# el rango de la matriz Pi
+
+# Para ello usaremos las siguientes especificaciones del test: 
+#  - type = "eigen": Criterio del valor propio máximo 
+#  - ecdet = "const":  Constante en el vector de cointegración
+
+# Al tener el VECM solo dos variables, el procedimiento secuencial a realizar es: 
+
+# H0: r = 0 vs H1: r >= 1, 
+# H0: r = 1 vs H1: r = 1, y asi
+# Aquí p = 2 variables y K = 3 rezagos (se estimo un VAR(3)).
+
 eigen_const_alt = urca::ca.jo(
-  Y_alt, ecdet = "const", type = "eigen", K = 2, spec = "transitory"
+  Y_alt, ecdet = "const", type = "eigen", K = p_var, spec = "transitory"
 )
+
+# Note que primero se rechaza la hipótesis nula r = 0, pero luego no se rechaza
+# la hipotesis nula r = 1, por lo que se concluye que existe una relación de
+# cointegración y las series están cointegradas. 
 summary(eigen_const_alt) # Se mantiene la conclusion
 
+# Estimacion del modelo VEC (comando cajorls) ----
 
-# Reparametrizacion ----
+# La funcion cajorls permite estimar el modelo VEC.
+VEC_const_alt = urca::cajorls(eigen_const_alt, r = 1)
+VEC_const_alt
+
+# Con esta funcion obtenemos el vector de cointegracion normalizado.
+coefB(VEC_const_alt)
+
+# Con esta funcion obtenemos los coeficientes de velocidad de ajuste.
+coefA(VEC_const_alt)
+
+# Reparametrizacion del modelo VEC en un modelo VAR (comando vec2var) ----
 
 VAR.oil_alt = vars::vec2var(eigen_const_alt, r = 1)
 
@@ -524,12 +669,12 @@ P.24_V_alt = vars::serial.test(VAR.oil_alt, lags.pt = 24,
 P.36_V_alt = vars::serial.test(VAR.oil_alt, lags.pt = 36,
                                type = "PT.asymptotic"); P.36_V_alt
 
-# Los supuestos del VAR reparametrizado se mantienen similares.
+# Nota: Se cumple el supuesto de no correlación serial en los residaules, en el 
+# VAR reparametrizado, que es el supuesto más importante
 
+# Funcioens Impulso-respuesta ortogonalizadas ----
 
-# Impulso-respuesta ----
-
-# Ahora, tenemos el momento decisivo. Veamos que ocurre con las OIRF.
+# Veamos que ocurre con las OIRF al cambiar el orden de las variables del modelo VEC.
 
 irf_ortog_vecm_alt = graficar_grilla_irf(
   VAR.oil_alt,
@@ -548,9 +693,26 @@ grid.arrange(grobs = irf_ortog_vecm_alt$graficas,
              layout_matrix = matrix(seq_along(irf_ortog_vecm_alt$graficas),
                                     nrow = length(variables_alt), byrow = TRUE))
 
-# Los impulso-respuesta cambian significativamente. ¿La nocion de esto? Depende
-# del contexto economico.
+# Nota: Las OIRF cambian sustancialmente. Note que, si asume que P.WTI ahora es la
+#       variable más exógena, entonces ahora, a diferencia de lo que ocurria anteriormente,
+#       los choques estructurales del P.WTI ahora sí son significativos y persistentes, y además
+#       los choques estructurales del P.Brent continuan siendo significativos y persistentes.
+#       Note que solo con cambiar el orden de las variables, el choque estructural del P.WTI
+#       paso de no ser casi significativo y disiparse, ahora a ser significativo y persistente
+#       por lo que se concluye que el orden en que se escogan las variables en el modelo VEC
+#       , al igual que lo que pasa en el modelo VAR, no es trivial, es fundamental saber escoger
+#       dicho orden de exógenidad por teoría económica o test estadísticos, por que dada la
+#       lógica de la descomposición de Cholesky, al escoger un orden diferente de las variables 
+#       del modelo, se pueden llegar a conclusiones muy distintas!
+#       Bienvenido a la Economía, donde todo es posible :D !!!!!
 
-# Lo que muestra la conclusion teorica es que la variable que se coloca primero
-# es la mas exogena de las dos. Por lo que, cuando construyan su VAR, coloquen
-# la mas exogena arriba.
+# Nota: Lo anterior muestra algunas de las limitaciones de la descomposición de Cholesky, como
+#       estrategía de identificación de choques estructurales. Claramente, el orden en que 
+#       se escogan las variables afecta la interpretación económico y sobre todo los restultados
+#       de política, pero en muchos casos el orden de exogenidad entre las variables o 1) no es 
+#       claro o 2) simplemente no existe. Para superar ese problema en la identificación de 
+#       choques estructurales usando descomposición de Cholesky, existen otras estrategias de
+#       identificación como lo puede ser un S-VECM (Structural VECM), donde a partir de una matriz
+#       S se pueden imponer restricciones más sensibles para la identificación de choque 
+#       estructurales, en la práctica, se usa mucho más este tipo de identificación que usar
+#       descomposición de Chokesky a lo maldita sea xD
