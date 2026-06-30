@@ -563,14 +563,18 @@ print(P_20.summary()) # No rechazo
 P_10 = V_dr.test_whiteness(nlags=10, adjusted=False)
 print(P_10.summary())
 
-# Graficamos diagnosticos de residuales: serie, distribucion, ACF y PACF.
+# Graficamos diagnosticos de residuales, incluyendo ACF/PACF de cuadrados.
 residuales = pd.DataFrame(
     np.asarray(V_dr.resid),
     index=Y_t.index[V_dr.k_ar :],
     columns=variables,
 )
 
-figuras_residuales = graficar_diagnostico_residuales_var(residuales, lags=20)
+figuras_residuales = graficar_diagnostico_residuales_var(
+    residuales,
+    lags=20,
+    incluir_cuadrados=True,
+)
 mostrar_graficas()
 
 # Nota: Se cumple el supuesto de no autocorrelación serial en los residuales

@@ -20,7 +20,7 @@
 #'  6.1. Test de Johansen - Sin constante en el vector de cointegración
 #'  6.2. Test de Johansen - Con constante en el vector de cointegración
 #'  6.3. Estimación del VECM(2) de acuerdo a los resultados del test de Johansen
-#'  6.4. Test para determinar tendencia lineal en la relación de cointegración con "lttest"
+#'  6.4. Test para determinar tendencia lineal en la reparametrización como VAR usando "lttest"
 #' 7. Validacion de supuestos y usos del modelo
 #'  7.1. Reparametrizacion del VECM como un VAR en niveles
 #'  7.2. Validacion de supuestos de VECM como VAR
@@ -284,18 +284,24 @@ plot(P.12, names = "P.WTI") # Bien comportados salvo por heterocedasticidad
 
 # La funcion ca.jo del paquete urca permite realizar el test de Johansen en R.
 
-# Argumentos del test de Johansen
+# Argumentos del comando ca.jo para realizar el test de Johansen: 
 
 # Para revisar todos los argumentos del test de Johansen se puede usar: ?ca.jo
 args(urca::ca.jo)
 
 # Nota: Existen 3 versiones diferentes del test de cointegración de Johansen 
 #       1) ecdet = "none": Relación de cointegración sin constante
-#                           (P.Brent - beta * P.WTI = 0 --> P.Brent = beta * P.WTI)  
+#                           P.Brent - beta * P.WTI = 0 (Cómo se vería la relación de cointetración 
+#                           P.Brent = beta * P.WTI     En el actual ejemplo)
+#
 #       2) ecdet = "const": Relación de cointegración con constante 
-#                           (P.Brent - beta * P.WTI + c = 0 --> P.Brent = beta * P.WTI - c)  
-#       3) ecdet = "trend": Relación de cointegración con tendencia lineal (beta' * Y_t + c + delta * t = 0)
-#                           (P.Brent - beta * P.WTI + c + delta * t = 0 --> P.Brent = beta * P.WTI - c - delta * t)
+#                           P.Brent - beta * P.WTI + c = 0 (Cómo se vería la relación de cointetración 
+#                           P.Brent = beta * P.WTI - c     En el actual ejemplo)
+#
+#       3) ecdet = "trend": Relación de cointegración con tendencia lineal
+#                           P.Brent - beta * P.WTI + c + delta * t = 0 (Cómo se vería la relación de cointetración   
+#                           P.Brent = beta * P.WTI - c - delta * t     En el actual ejemplo)
+#
 
 # Donde "beta" es el coeficiente de cointegración que aparece en el vector de cointegración
 
@@ -314,7 +320,8 @@ args(urca::ca.jo)
 # ===
 
 # Nota: Estamos en el caso: ecdet = "none": Relación de cointegración sin constante
-#                           (P.Brent - beta * P.WTI = 0 --> P.Brent = beta * P.WTI)  
+#                           (P.Brent - beta * P.WTI = 0, es decir, 
+#                            P.Brent = beta * P.WTI)  
 
 # Nota: Hay dos manera de hacer el test de Johansen: 
 #       1. Criterio del valor propio máximo
@@ -367,7 +374,8 @@ summary(trace_none)
 # ===
 
 # Nota: Estamos en el caso: ecdet = "const": Relación de cointegración con constante 
-#                           (P.Brent - beta * P.WTI + c = 0 --> P.Brent = beta * P.WTI - c)  
+#                           (P.Brent - beta * P.WTI + c = 0, es decir, 
+#                            P.Brent = beta * P.WTI - c)  
 
 # ===
 # Nota: Este es el el caso más común, entonces por lo general trabajaremos con 
@@ -402,7 +410,7 @@ summary(trace_const)
 # 6.3. Estimación del VECM(2) de acuerdo a los resultados del test de Johansen ====
 # ===
 
-# Sin constante ----
+# Sin intercepto en la relación de cointegración ----
 
 # La funcion cajorls del paquete urca permite estimar el modelo VEC.
 VEC_none = urca::cajorls(eigen_none, r = 1) # r=1 para indicar que hay una relación de cointegración
@@ -415,7 +423,7 @@ coefB(VEC_none)
 coefA(VEC_none)
 
 
-# Con constante ----
+# Con intercepto en la relación de cointegración ----
 
 # La funcion cajorls permite estimar el modelo VEC.
 VEC_const = urca::cajorls(eigen_const, r = 1)
@@ -429,7 +437,7 @@ coefA(VEC_const)
 
 
 # ===
-# 6.4. Test para determinar tendencia lineal en la relación de cointegración con "lttest" ====
+# 6.4. Test para determinar tendencia lineal en la reparametrización como VAR usando "lttest" ====
 # ===
 
 # La funcion lttest del paquete urca permite determinar la existencia de una tendencia 
@@ -458,8 +466,8 @@ urca::lttest(eigen_const, r = 1)
 # 7.1. Reparametrizacion del VECM como un VAR en niveles ====
 # ===
 
-# Nota: Dados los resultados de la prueba lttest, se usara el modelo VEC con
-# constante en el vector de cointegracion.
+# Nota: Dados los resultados anteriores, se usara el modelo VEC con constante en
+# el vector de cointegracion.
 
 # Nota: Luego de estimar el modelo VECM usando la función cajorls del paquete
 #       urca, se puede reparatremizar el modelo VECM de nuevo como un modelo VAR
@@ -543,6 +551,12 @@ g_pronostico_vecm = graficar_pronostico_vecm(prono_VECM) +
 x11()
 print(g_pronostico_vecm)
 
+# Version fanchart, similar a fanchart(predict(...)) en R.
+g_fanchart_vecm = graficar_fanchart_vecm(Y, prono_VECM)
+
+x11(width = 12, height = 6)
+print(g_fanchart_vecm)
+
 
 # ===
 # 7.4. Funciones impulso-respuesta para VECM ====
@@ -609,7 +623,7 @@ Y_alt = ts.intersect(P.WTI = P.WTI, P.Brent = P.Brent)
 # pero está vez con las variables intercambiadas
 
 # Se estima un VAR(3), pero con las variables intercambiadas de orden 
-VAR3_alt = vars::VAR(Y_alt, p = p_var, type = "const", season = NULL)
+VAR3_alt = vars::VAR(Y_alt, p = p_var, type = "const", season = NULL); summary(VAR3_alt)
 
 # Test de ljung-box
 

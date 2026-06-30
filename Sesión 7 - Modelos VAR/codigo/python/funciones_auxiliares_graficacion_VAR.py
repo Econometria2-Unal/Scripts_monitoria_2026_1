@@ -769,6 +769,7 @@ def graficar_diagnostico_errores(
 def graficar_diagnostico_residuales_var(
     residuales: pd.DataFrame,
     lags: int = 20,
+    incluir_cuadrados: bool = True,
 ):
     """Grafica diagnosticos de residuales para cada ecuacion del VAR.
 
@@ -778,6 +779,9 @@ def graficar_diagnostico_residuales_var(
         Residuales del modelo VAR, con una columna por variable.
     lags : int, default 20
         Numero de rezagos usados en las graficas ACF y PACF.
+    incluir_cuadrados : bool, default True
+        Si es True, agrega las graficas ACF y PACF de los residuales al
+        cuadrado.
 
     Retorna
     -------
@@ -787,8 +791,14 @@ def graficar_diagnostico_residuales_var(
     figuras = {}
 
     for nombre, serie in residuales.items():
-        fig, axes = plt.subplots(2, 2, figsize=(12, 6))
+        n_filas = 3 if incluir_cuadrados else 2
+        fig, axes = plt.subplots(
+            n_filas,
+            2,
+            figsize=(12, 8 if incluir_cuadrados else 6),
+        )
         fig.suptitle(f"Diagnostico de residuales - {nombre}", fontsize=13)
+        serie = serie.dropna()
 
         eje_x = _indice_para_grafica(serie.index)
         sns.lineplot(x=eje_x, y=serie.to_numpy(), ax=axes[0, 0], color="steelblue")
@@ -810,6 +820,22 @@ def graficar_diagnostico_residuales_var(
             method="ywm",
             title="PACF residuales",
         )
+
+        if incluir_cuadrados:
+            serie_cuadrada = serie**2
+            plot_acf(
+                serie_cuadrada,
+                ax=axes[2, 0],
+                lags=lags,
+                title="ACF residuales al cuadrado",
+            )
+            plot_pacf(
+                serie_cuadrada,
+                ax=axes[2, 1],
+                lags=lags,
+                method="ywm",
+                title="PACF residuales al cuadrado",
+            )
 
         fig.tight_layout()
         figuras[nombre] = fig

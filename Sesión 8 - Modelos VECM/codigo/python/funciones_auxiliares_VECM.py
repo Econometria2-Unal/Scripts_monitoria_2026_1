@@ -239,6 +239,47 @@ def extraer_matrices_vecm(vecm_resultados, variables=None):
     }
 
 
+def imprimir_matrices_var_reparametrizado(vecm_resultados, variables=None):
+    """Imprime las matrices del VAR en niveles asociado a un VECM.
+
+    Parametros
+    ----------
+    vecm_resultados : object
+        Resultado del modelo VECM estimado. Debe tener el atributo `var_rep`,
+        que contiene las matrices de la reparametrizacion como VAR en niveles.
+    variables : iterable of str, optional
+        Nombres de las variables del modelo. Si no se entrega, se usan los
+        nombres guardados en el objeto estimado o etiquetas genericas.
+
+    Retorna
+    -------
+    dict
+        Diccionario con las matrices A_i de la reparametrizacion VAR, una por
+        cada rezago del VAR en niveles.
+    """
+    if variables is None:
+        variables = getattr(vecm_resultados, "names", None)
+    if variables is None:
+        n_variables = np.asarray(vecm_resultados.var_rep).shape[1]
+        variables = [f"y_{i + 1}" for i in range(n_variables)]
+    variables = list(variables)
+
+    matrices = {}
+    for i, matriz in enumerate(vecm_resultados.var_rep, start=1):
+        matriz_ai = pd.DataFrame(
+            matriz,
+            index=variables,
+            columns=[f"L{i}.{variable}" for variable in variables],
+        )
+        nombre_matriz = f"A_{i}"
+        matrices[nombre_matriz] = matriz_ai
+
+        print(f"\nMatriz {nombre_matriz} de la reparametrizacion VAR")
+        print(matriz_ai)
+
+    return matrices
+
+
 def prueba_arch_por_ecuacion(residuales: pd.DataFrame, lags: int, variables=None):
     """Aplica pruebas ARCH univariadas a los residuales de un modelo.
 
@@ -464,15 +505,15 @@ def graficar_series_vecm(
             linewidth=1.1,
         )
 
-    ax.set_title(titulo, fontsize=12)
+    ax.set_title(titulo, fontsize=12, pad=18 if subtitulo is not None else 6)
     if subtitulo is not None:
         ax.text(
             0.5,
-            1.01,
+            1.02,
             subtitulo,
             transform=ax.transAxes,
             ha="center",
-            va="bottom",
+            va="top",
             fontsize=10,
             color="#595959",
         )
@@ -482,13 +523,14 @@ def graficar_series_vecm(
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.grid(True, color="#e0e0e0", linewidth=0.8)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.92) if subtitulo is not None else None)
     return fig, ax
 
 
 def graficar_diagnostico_residuales_vecm(
     residuales: pd.DataFrame,
     lags: int = 20,
+    incluir_cuadrados: bool = True,
 ):
     """Grafica diagnosticos de residuales para cada ecuacion del modelo.
 
@@ -498,6 +540,9 @@ def graficar_diagnostico_residuales_vecm(
         Residuales del modelo, con una columna por variable.
     lags : int, default 20
         Numero de rezagos usados en las graficas ACF y PACF.
+    incluir_cuadrados : bool, default True
+        Si es True, agrega las graficas ACF y PACF de los residuales al
+        cuadrado.
 
     Retorna
     -------
@@ -507,8 +552,14 @@ def graficar_diagnostico_residuales_vecm(
     figuras = {}
 
     for nombre, serie in residuales.items():
-        fig, axes = plt.subplots(2, 2, figsize=(12, 6))
+        n_filas = 3 if incluir_cuadrados else 2
+        fig, axes = plt.subplots(
+            n_filas,
+            2,
+            figsize=(12, 8 if incluir_cuadrados else 6),
+        )
         fig.suptitle(f"Diagnostico de residuales - {nombre}", fontsize=13)
+        serie = serie.dropna()
 
         eje_x = _indice_para_grafica(serie.index)
         sns.lineplot(x=eje_x, y=serie.to_numpy(), ax=axes[0, 0], color="steelblue")
@@ -530,6 +581,22 @@ def graficar_diagnostico_residuales_vecm(
             method="ywm",
             title="PACF residuales",
         )
+
+        if incluir_cuadrados:
+            serie_cuadrada = serie**2
+            plot_acf(
+                serie_cuadrada,
+                ax=axes[2, 0],
+                lags=lags,
+                title="ACF residuales al cuadrado",
+            )
+            plot_pacf(
+                serie_cuadrada,
+                ax=axes[2, 1],
+                lags=lags,
+                method="ywm",
+                title="PACF residuales al cuadrado",
+            )
 
         fig.tight_layout()
         figuras[nombre] = fig

@@ -130,6 +130,110 @@ graficar_pronostico_vecm = function(pronostico){
 }
 
 
+#' Grafica un fanchart de pronosticos de un VECM reparametrizado.
+#'
+#' @param datos Series observadas usadas como historia del fanchart.
+#' @param pronostico Resultado de `predict` aplicado al modelo reparametrizado.
+#' @param variables Variables que se quieren graficar. Si no se entrega, se usan
+#'   todas las variables incluidas en el pronostico.
+#' @param colores Vector con el color de la linea de pronostico y el color del
+#'   intervalo.
+#'
+#' @return Una grafica de ggplot2 con el fanchart de cada variable.
+graficar_fanchart_vecm = function(datos, pronostico, variables = NULL,
+                                  colores = c("blue", "lightblue")){
+  datos_observados = as.data.frame(datos)
+
+  if (is.null(variables)) {
+    variables = names(pronostico$fcst)
+  }
+
+  variables_no_disponibles = setdiff(variables, colnames(datos_observados))
+  if (length(variables_no_disponibles) > 0) {
+    stop("Hay variables que no estan en los datos observados.")
+  }
+
+  variables_sin_pronostico = setdiff(variables, names(pronostico$fcst))
+  if (length(variables_sin_pronostico) > 0) {
+    stop("Hay variables que no estan en el objeto de pronostico.")
+  }
+
+  datos_historia = datos_observados %>%
+    mutate(indice = seq_len(n()) - 1) %>%
+    select(indice, one_of(variables)) %>%
+    gather(key = "variable", value = "valor", -indice)
+
+  datos_pronostico = imap_dfr(pronostico$fcst[variables], function(matriz, variable){
+    as.data.frame(matriz) %>%
+      transmute(
+        indice = nrow(datos_observados) + row_number() - 1,
+        variable = variable,
+        pronostico = fcst,
+        inferior = lower,
+        superior = upper
+      )
+  })
+
+  datos_conexion = datos_historia %>%
+    group_by(variable) %>%
+    filter(indice == max(indice)) %>%
+    slice(1) %>%
+    ungroup() %>%
+    select(variable, x = indice, y = valor) %>%
+    left_join(
+      datos_pronostico %>%
+        group_by(variable) %>%
+        filter(indice == min(indice)) %>%
+        slice(1) %>%
+        ungroup() %>%
+        select(variable, xend = indice, yend = pronostico),
+      by = "variable"
+    )
+
+  ggplot() +
+    geom_linea_actual(
+      data = datos_historia,
+      aes(x = indice, y = valor),
+      color = "black",
+      ancho = 0.6
+    ) +
+    geom_ribbon(
+      data = datos_pronostico,
+      aes(x = indice, ymin = inferior, ymax = superior),
+      fill = colores[2],
+      alpha = 0.75
+    ) +
+    geom_linea_actual(
+      data = datos_pronostico,
+      aes(x = indice, y = pronostico),
+      color = colores[1],
+      ancho = 0.8
+    ) +
+    geom_segment(
+      data = datos_conexion,
+      aes(x = x, y = y, xend = xend, yend = yend),
+      color = colores[1],
+      size = 0.7
+    ) +
+    facet_wrap(
+      ~ variable,
+      ncol = 1,
+      scales = "free_y",
+      labeller = as_labeller(function(variable) paste("Fanchart para", variable))
+    ) +
+    theme_light(base_size = 10) +
+    xlab("") +
+    ylab("") +
+    theme(
+      strip.text = element_text(size = 11, face = "bold"),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect_actual(color = "black", fill = NA, ancho = 0.6),
+      axis.text = element_text(size = 9, color = "black")
+    )
+}
+
+
 # 2. Funciones auxiliares para impulso-respuesta ----
 
 #' Extrae datos de una funcion impulso-respuesta.

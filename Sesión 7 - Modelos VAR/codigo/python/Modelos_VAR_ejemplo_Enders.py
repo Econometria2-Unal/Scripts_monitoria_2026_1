@@ -410,7 +410,7 @@ print(P_20.summary()) # No rechazo
 P_10 = VAR_enders.test_whiteness(nlags=10, adjusted=False)
 print(P_10.summary())
 
-# Graficamos los diagnosticos de residuales: serie, distribucion, ACF y PACF.
+# Graficamos los diagnosticos de residuales, incluyendo ACF/PACF de cuadrados.
 residuales_enders = pd.DataFrame(
     np.asarray(VAR_enders.resid),
     index=Y.index[VAR_enders.k_ar :],
@@ -420,6 +420,7 @@ residuales_enders = pd.DataFrame(
 figuras_residuales = graficar_diagnostico_residuales_var(
     residuales_enders,
     lags=20,
+    incluir_cuadrados=True,
 )
 mostrar_graficas()
 
