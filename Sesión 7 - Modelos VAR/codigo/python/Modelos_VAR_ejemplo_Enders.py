@@ -583,7 +583,7 @@ mostrar_graficas()
 # IRFs ortogonalizadas:
 print(VAR_enders.irf(10).orth_irfs)
 
-# Graficacion de las IRFs
+# Graficación de las IRFs ortogonalizadas
 
 # Usamos los mismos pasos adelante, intervalo de confianza y semilla.
 # IRFs ortogonalizadas de las variables del sistema ante distintos choques

@@ -484,7 +484,7 @@ grid.arrange(grobs = irf_no_ortog$graficas,
 Psi(VAR_enders, nstep = 10) # Esta función nos calcula la matriz de coeficientes de 
                             # las IRFs ortogonalizadas "n pasos adelante" 
 
-# Graficación de las IRFs
+# Graficación de las IRFs ortogonalizadas
 
 # Usamos los mismos pasos adelante, intervalo de confianza y semilla.
 # IRFs ortogonalizadas de las variables del sistema ante distintos choques exogenos.
