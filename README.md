@@ -111,11 +111,11 @@ La carpeta contiene:
 | `codigo/R/` | Versión en R del mismo ejercicio y visualizaciones HTML. |
 | `codigo/simulax_normal_multivariada.pdf` | Documento teórico complementario sobre la construcción matricial de la simulación. |
 
-Se comparan distintas formas de obtener la matriz \(P\), como descomposición espectral, SVD y Cholesky.
+Se comparan distintas formas de obtener la matriz $P$, como descomposición espectral, SVD y Cholesky.
 
 ### Sesión 7 - Modelos VAR
 
-Esta sesión estudia modelos VAR, útiles para analizar sistemas donde varias variables se explican conjuntamente por sus propios rezagos y por los rezagos de las demás variables. En términos generales, un VAR(\(p\)) puede escribirse como:
+Esta sesión estudia modelos VAR, útiles para analizar sistemas donde varias variables se explican conjuntamente por sus propios rezagos y por los rezagos de las demás variables. En términos generales, un VAR($p$) puede escribirse como:
 
 ```math
 Y_t = A_0 + A_1Y_{t-1} + A_2Y_{t-2} + \cdots + A_pY_{t-p} + u_t.
@@ -154,7 +154,7 @@ Cuando existe cointegración,
 \Pi = \alpha\beta',
 ```
 
-donde \(\beta\) contiene las relaciones de equilibrio de largo plazo y \(\alpha\) contiene las velocidades de ajuste.
+donde $\beta$ contiene las relaciones de equilibrio de largo plazo y $\alpha$ contiene las velocidades de ajuste.
 
 La carpeta contiene:
 
