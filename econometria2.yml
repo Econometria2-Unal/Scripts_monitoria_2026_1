@@ -1,0 +1,15 @@
+name: econometria2
+channels:
+  - defaults
+dependencies:
+  - python=3.14
+  - matplotlib
+  - openpyxl
+  - numpy
+  - plotly
+  - seaborn
+  - pandas
+  - nbformat
+  - statsmodels
+  - ipykernel
+prefix: C:\Users\gcrp9\anaconda3\envs\econometria2
